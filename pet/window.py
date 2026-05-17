@@ -162,6 +162,12 @@ class PetWindow(QWidget):
         self._chain_anchor: QPoint | None = None   # centre of allowed zone
         self._chain_radius: int = 180              # max pixels from anchor
 
+        # Jump physics
+        self._jump_active   = False
+        self._jump_vy       = 0.0    # vertical velocity (negative = upward)
+        self._jump_gravity  = 1.5   # px/tick² acceleration downward
+        self._jump_origin_y = 0     # Y position before jump started
+
         # Window setup
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground)
@@ -189,6 +195,11 @@ class PetWindow(QWidget):
         names = [
             "walk_right", "walk_left", "run_right", "run_left",
             "idle", "sleep", "watch", "excited", "grabbed", "dance",
+            # Phase 1
+            "sit_right", "sit_left",
+            "jump_right", "jump_left",
+            "paw_right",  "paw_left",
+            "scratch",    "stretch",
         ]
         for name in names:
             self._sheets[name] = SpriteSheet(
@@ -343,8 +354,16 @@ class PetWindow(QWidget):
             return
 
         state = self._brain.state
+
+        # ── JUMP: horizontal wander + vertical parabola ───────────────────
+        if state == PetState.JUMP:
+            self._do_jump_tick()
+            return
+
         if state in (PetState.IDLE, PetState.SLEEP, PetState.WATCH,
-                     PetState.EXCITED, PetState.GRABBED, PetState.DANCE):
+                     PetState.EXCITED, PetState.GRABBED, PetState.DANCE,
+                     PetState.SIT, PetState.SCRATCH, PetState.STRETCH,
+                     PetState.PAW):
             return
 
         speed = self._base_speed
@@ -383,6 +402,11 @@ class PetWindow(QWidget):
 
         if bounced:
             self._frame_idx = 0
+            # Screen-edge PAW: 40 % chance Buddy bats the wall when wandering
+            if (state == PetState.WALK and random.random() < 0.40
+                    and (new_x <= 2 or new_x + pw >= sw - 2)):
+                self._brain.do_paw()
+                return
 
         self._facing_right = self._wander_dir.x() >= 0
         self._pos = QPoint(new_x, new_y)
@@ -437,6 +461,39 @@ class PetWindow(QWidget):
         self._facing_right = dx >= 0
         self._pos = QPoint(new_x, new_y)
         self.move(self._pos)
+
+    def _do_jump_tick(self) -> None:
+        """Advance one tick of jump physics: horizontal wander + vertical parabola."""
+        sw, sh = self._screen_rect.width(), self._screen_rect.height()
+        pw, ph = self.FRAME_W * self.SCALE, self.FRAME_H * self.SCALE
+
+        # Horizontal component — same as normal walk
+        dx = self._wander_dir.x() * self._base_speed
+        new_x = int(self._pos.x() + dx)
+        new_x = max(0, min(new_x, sw - pw))
+
+        # Vertical component — parabolic arc
+        self._jump_vy += self._jump_gravity
+        new_y = int(self._pos.y() + self._jump_vy)
+
+        if new_y >= self._jump_origin_y:   # touched ground
+            new_y = self._jump_origin_y
+            self._jump_active = False
+            self._jump_vy = 0.0
+            self._brain.on_jump_landed()
+
+        self._facing_right = self._wander_dir.x() >= 0
+        self._pos = QPoint(new_x, new_y)
+        self.move(self._pos)
+
+    def do_jump(self) -> None:
+        """Public: trigger a hop from the current ground position."""
+        if self._jump_active or self._is_dragging:
+            return
+        self._jump_origin_y = self._pos.y()
+        self._jump_vy = -15.0
+        self._jump_active = True
+        self._brain.do_jump()
 
     @pyqtSlot()
     def _pick_new_direction(self) -> None:

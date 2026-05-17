@@ -20,7 +20,7 @@ from system.throttle import ThrottleLevel
 
 
 class PetState(Enum):
-    IDLE     = auto()   # sitting, blinking
+    IDLE     = auto()   # standing still, blinking
     WALK     = auto()   # wandering around
     RUN      = auto()   # chasing cursor / excited burst
     SLEEP    = auto()   # curled up, system overloaded or long idle
@@ -28,6 +28,12 @@ class PetState(Enum):
     EXCITED  = auto()   # pet just got clicked / greeted
     GRABBED  = auto()   # user is dragging
     DANCE    = auto()   # music playing
+    # Phase 1 — expressive behaviours
+    SIT      = auto()   # sitting attentively
+    JUMP     = auto()   # jumping (PetWindow drives the parabola)
+    PAW      = auto()   # batting front paw at screen edge
+    SCRATCH  = auto()   # scratching ear with raised hind leg
+    STRETCH  = auto()   # waking / boredom body-stretch
 
 
 # Maps state -> sprite sheet name suffix (direction appended by engine)
@@ -40,10 +46,17 @@ STATE_SPRITE: dict[PetState, str] = {
     PetState.EXCITED: "excited",
     PetState.GRABBED: "grabbed",
     PetState.DANCE:   "dance",
+    # Phase 1
+    PetState.SIT:     "sit",
+    PetState.JUMP:    "jump",
+    PetState.PAW:     "paw",
+    PetState.SCRATCH: "scratch",
+    PetState.STRETCH: "stretch",
 }
 
-# States that involve horizontal movement (need _right / _left suffix)
-DIRECTIONAL_STATES = {PetState.WALK, PetState.RUN}
+# States that need _right / _left suffix (directional facing)
+DIRECTIONAL_STATES = {PetState.WALK, PetState.RUN,
+                       PetState.SIT, PetState.JUMP, PetState.PAW}
 
 
 @dataclass
@@ -98,28 +111,54 @@ class PetBrain:
             return
         elapsed = time.monotonic() - self._state_since
 
-        # If excited for > 2s, return to context-appropriate state
+        # EXCITED expires after 2 s
         if self._state == PetState.EXCITED and elapsed > 2:
             self._resolve()
             return
 
-        # Throttle-forced sleep overrides everything
+        # JUMP is owned by PetWindow physics — never interrupt it here
+        if self._state == PetState.JUMP:
+            return
+
+        # Throttle-forced sleep overrides everything except active grab
         if self.throttle == ThrottleLevel.SLEEP:
             self._transition(PetState.SLEEP)
             return
 
-        # Context-driven state or wander
+        # Auto-exit from timed expressive states
+        if self._state == PetState.SIT and elapsed > 8:
+            self._resolve()   # return to context-appropriate state
+            return
+        if self._state in (PetState.SCRATCH, PetState.STRETCH) and elapsed > 4:
+            self._transition(PetState.IDLE)
+            return
+        if self._state == PetState.PAW and elapsed > 2.5:
+            self._transition(PetState.IDLE)
+            return
+        # Don't tick further while mid-animation
+        if self._state in (PetState.SIT, PetState.SCRATCH,
+                           PetState.STRETCH, PetState.PAW):
+            return
+
+        # Context-driven transitions
         desired = self._desired_state()
         if desired != self._state:
             self._transition(desired)
         elif self._state == PetState.WALK and elapsed > 4:
-            # Pause to sit/idle fairly often — makes the pet feel natural
+            # Pause fairly often — makes the pet feel natural
             if random.random() < 0.55:
                 self._transition(PetState.IDLE)
         elif self._state == PetState.IDLE and elapsed > 6:
-            # Resume wandering after a rest
-            if random.random() < 0.4:
-                self._transition(PetState.WALK)
+            # Randomly pick an idle behaviour or resume walking
+            r = random.random()
+            if r < 0.25:
+                self._transition(PetState.SIT)      # 25 % sit down
+            elif r < 0.40:
+                self._transition(PetState.SCRATCH)  # 15 % scratch ear
+            elif r < 0.48:
+                self._transition(PetState.STRETCH)  #  8 % stretch
+            elif r < 0.68:
+                self._transition(PetState.WALK)     # 20 % resume walk
 
     # ------------------------------------------------------------------ #
     # Internals                                                            #
@@ -156,3 +195,22 @@ class PetBrain:
         if new_state != self._state:
             self._state = new_state
             self._state_since = time.monotonic()
+
+    # ------------------------------------------------------------------ #
+    # Phase 1 public API                                                   #
+    # ------------------------------------------------------------------ #
+
+    def do_jump(self) -> None:
+        """Trigger a jump. PetWindow drives the parabola and calls on_jump_landed."""
+        if not self._grabbed:
+            self._transition(PetState.JUMP)
+
+    def on_jump_landed(self) -> None:
+        """Called by PetWindow when the jump arc completes."""
+        if self._state == PetState.JUMP:
+            self._resolve()
+
+    def do_paw(self) -> None:
+        """Trigger the screen-edge paw animation (called from PetWindow)."""
+        if self._state not in (PetState.GRABBED, PetState.SLEEP, PetState.JUMP):
+            self._transition(PetState.PAW)

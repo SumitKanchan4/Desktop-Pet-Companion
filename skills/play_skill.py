@@ -116,6 +116,7 @@ class PlaySkill:
             self._treat = None
         self._brain.on_click()
         sound_engine.excited_yip(count=2)
+        self._window.do_jump()   # joy jump after eating
         treats = [
             "Woof! Got it! 🐾 Yummy!",
             "Nom nom nom! 🦴 Best treat ever!",

@@ -19,6 +19,7 @@ class SocialSkill:
     def on_petted(self) -> None:
         self._mood.on_interacted()
         sound_engine.excited_yip(count=1)
+        self._window.do_jump()   # happy jump
         pets = [
             "❤️ *melts* ...more please!!",
             f"❤️❤️ Best pets ever, {self._username}!",

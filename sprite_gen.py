@@ -250,6 +250,175 @@ def make_dance_frames():
             for i in range(4)]
 
 
+# ── Phase 1: new expressive animation frame makers ───────────────────────────
+
+def make_sit_frames(fr=True):
+    """6 frames: Buddy settling into a sit and holding, tail wagging."""
+    out = []
+    bx, by = BX0, BY0 + 2   # body sits slightly lower than standing
+    for i in range(6):
+        img, d = _f()
+        hx, hy = bx + 14, by - 15   # head slightly higher (sitting upright)
+        wag_v = [0, 2, 4, -2, -4, 1][i]
+
+        # Tail curves upward over back when sitting (not drooped)
+        tx = bx - 12
+        ty = by - 1
+        pts_t = [(tx, ty), (max(0, tx - 2), ty - 8), (tx + 2 + wag_v, by - 15)]
+        d.line(pts_t, fill=OTL, width=7)
+        d.line(pts_t, fill=FUR, width=5)
+        d.line(pts_t, fill=HFU, width=2)
+        _e(d, pts_t[-1][0], pts_t[-1][1], 5, 5, HFU, OTL)
+        _e(d, pts_t[-1][0], pts_t[-1][1], 3, 3, CHI)
+
+        # Compact body (slightly taller proportion for a sitting dog)
+        d.ellipse([bx - 11, by - 10, bx + 13, by + 9], fill=OTL)
+        d.ellipse([bx - 10, by - 9,  bx + 12, by + 8], fill=FUR)
+        d.ellipse([bx -  7, by - 11, bx +  9, by - 2], fill=HFU)
+        d.ellipse([bx -  7, by +  2, bx +  9, by + 9], fill=CRE)
+
+        # Haunches on ground (rounded lump at rear-bottom)
+        _e(d, bx - 12, by + 6, 7, 5, OTL)
+        _e(d, bx - 12, by + 6, 6, 4, FUR)
+        _e(d, bx - 12, by + 6, 4, 3, SFU)
+
+        # Front legs straight down (sitting posture)
+        for lx in [bx + 8, bx + 12]:
+            lxc = min(FW - 2, lx)
+            aye = min(FH - 3, by + 17)
+            d.line([(lxc, by + 7), (lxc, aye)], fill=OTL, width=5)
+            d.line([(lxc, by + 7), (lxc, aye)], fill=SFU, width=3)
+            _e(d, lxc, min(FH - 3, aye), 4, 2, CRE, OTL)
+
+        _collar(d, hx, by - 2)
+        _ear(d, hx, hy)
+        _head(d, hx, hy, blink=(i == 3), mouth=(i == 5))
+        out.append(img if fr else img.transpose(_FL))
+    return out
+
+
+def make_jump_frames(fr=True):
+    """8 frames: crouch → launch → airborne peak → descent → land → recover.
+    PetWindow moves the actual window position as a parabola; the sprite shows
+    the body pose at each stage.
+    """
+    # (bob, wag, mouth, sx, droop, phase)
+    params = [
+        ( 2,  0, False, 0, True,  0),  # 0: pre-jump crouch
+        (-2,  4, True,  2, False, 1),  # 1: push-off (body stretching up)
+        (-7,  6, True,  3, False, 0),  # 2: rising
+        (-9,  8, True,  4, False, 1),  # 3: peak (max height in frame)
+        (-9, -8, True,  4, False, 0),  # 4: peak hold (tail swings other way)
+        (-5,  5, False, 2, False, 1),  # 5: descent
+        (-1,  3, False, 0, False, 0),  # 6: about to land
+        ( 3, -3, False, 0, True,  0),  # 7: land impact (legs compressed)
+    ]
+    out = []
+    for bob, wag, mouth, sx, droop, phase in params:
+        f = _mk(phase=phase, wag=wag, bob=bob, mouth=mouth, sx=sx, droop=droop)
+        out.append(f if fr else f.transpose(_FL))
+    return out
+
+
+def make_paw_frames(fr=True):
+    """6 frames: front right paw raised and batting at screen edge."""
+    exts = [0, 3, 6, 8, 6, 3]   # reach extension per frame
+    out = []
+    for ext in exts:
+        img, d = _f()
+        bx, by = BX0, BY0
+        hx, hy = bx + 14, by - 14
+        _tail(d, bx, by, wag=3, droop=True)
+        _body(d, bx, by)
+        _ear(d, hx, hy)
+        _collar(d, hx, by)
+
+        # Front-left + both back legs — drawn normally
+        for lx in [bx + 7, bx - 8, bx - 12]:
+            d.line([(lx, by + 7), (lx, by + 14)], fill=OTL, width=5)
+            d.line([(lx, by + 7), (lx, by + 14)], fill=SFU, width=3)
+            _e(d, lx, by + 16, 4, 2, CRE, OTL)
+
+        # Front-right paw raised and reaching forward
+        lx_r  = bx + 11
+        paw_x = min(FW - 3, lx_r + 4 + ext)
+        paw_y = max(2, by + 7 - 5 - ext // 2)
+        d.line([(lx_r, by + 7), (paw_x, paw_y)], fill=OTL, width=5)
+        d.line([(lx_r, by + 7), (paw_x, paw_y)], fill=SFU, width=3)
+        _e(d, min(FW - 3, paw_x + 3), paw_y, 5, 3, CRE, OTL)
+
+        _head(d, hx, hy, blink=(ext == 8))
+        out.append(img if fr else img.transpose(_FL))
+    return out
+
+
+def make_scratch_frames():
+    """4 frames: back hind leg raised, scratching behind ear."""
+    # (thigh x-offset, thigh y-offset) relative to hind leg base
+    scratch_pts = [(6, -1), (8, -6), (9, -5), (7, -2)]
+    out = []
+    for i, (sx_off, sy_off) in enumerate(scratch_pts):
+        img, d = _f()
+        bx, by = BX0, BY0
+        hx, hy = bx + 14, by - 14
+        _tail(d, bx, by, wag=[2, 0, -2, 0][i], droop=True)
+        _body(d, bx, by)
+        _ear(d, hx, hy)
+        _collar(d, hx, by)
+
+        # Both front legs + back-right leg — normal
+        for lx in [bx + 11, bx + 7, bx - 8]:
+            d.line([(lx, by + 7), (lx, by + 14)], fill=OTL, width=5)
+            d.line([(lx, by + 7), (lx, by + 14)], fill=SFU, width=3)
+            _e(d, lx, by + 16, 4, 2, CRE, OTL)
+
+        # Back-left leg raised and bent toward ear
+        hx_b = bx - 12
+        tip_x = hx_b + sx_off
+        tip_y = by + sy_off
+        d.line([(hx_b, by + 7), (tip_x, tip_y)], fill=OTL, width=5)
+        d.line([(hx_b, by + 7), (tip_x, tip_y)], fill=SFU, width=3)
+        _e(d, tip_x + 3, tip_y, 4, 2, CRE, OTL)   # paw near ear
+
+        _head(d, hx, hy, blink=(i == 2))
+        out.append(img)
+    return out
+
+
+def make_stretch_frames():
+    """5 frames: waking body-stretch — front paws forward, back arched, big yawn."""
+    # (body_sx, head_dip, mouth_open)
+    params = [(0, 0, False), (2, 1, False), (5, 2, True), (5, 2, True), (1, 0, False)]
+    out = []
+    for sx, hdip, mouth in params:
+        img, d = _f()
+        bx = BX0 - sx // 2
+        by = BY0 + 2
+        hx = bx + 14 + sx // 2
+        hy = by - 12 + hdip   # head dips slightly during stretch
+        _tail(d, max(1, bx - sx // 2), by, wag=0, droop=True)
+        _body(d, bx, by, sx=sx)
+
+        # Front paws extended forward flat
+        for lx_f in [bx + 12 + sx, bx + 8 + sx]:
+            lx = min(FW - 3, lx_f)
+            d.line([(lx, by + 5), (lx + 3, by + 14)], fill=OTL, width=5)
+            d.line([(lx, by + 5), (lx + 3, by + 14)], fill=SFU, width=3)
+            _e(d, min(FW - 3, lx + 6), by + 15, 6, 2, CRE, OTL)
+
+        # Back legs (normal)
+        for lx_b in [bx - 8, bx - 12]:
+            d.line([(lx_b, by + 5), (lx_b, by + 14)], fill=OTL, width=5)
+            d.line([(lx_b, by + 5), (lx_b, by + 14)], fill=SFU, width=3)
+            _e(d, lx_b, by + 15, 4, 2, CRE, OTL)
+
+        _collar(d, hx, by)
+        _ear(d, hx, hy)
+        _head(d, hx, hy, mouth=mouth)
+        out.append(img)
+    return out
+
+
 # ── Sheet builder ─────────────────────────────────────────────────────────────
 
 def _sheet(frames, name):
@@ -262,16 +431,25 @@ def _sheet(frames, name):
 
 def generate_all():
     SPRITE_DIR.mkdir(parents=True, exist_ok=True)
-    _sheet(make_walk_frames(True),  "walk_right")
-    _sheet(make_walk_frames(False), "walk_left")
-    _sheet(make_run_frames(True),   "run_right")
-    _sheet(make_run_frames(False),  "run_left")
-    _sheet(make_idle_frames(),      "idle")
-    _sheet(make_sleep_frames(),     "sleep")
-    _sheet(make_watch_frames(),     "watch")
-    _sheet(make_excited_frames(),   "excited")
-    _sheet(make_grabbed_frames(),   "grabbed")
-    _sheet(make_dance_frames(),     "dance")
+    _sheet(make_walk_frames(True),   "walk_right")
+    _sheet(make_walk_frames(False),  "walk_left")
+    _sheet(make_run_frames(True),    "run_right")
+    _sheet(make_run_frames(False),   "run_left")
+    _sheet(make_idle_frames(),       "idle")
+    _sheet(make_sleep_frames(),      "sleep")
+    _sheet(make_watch_frames(),      "watch")
+    _sheet(make_excited_frames(),    "excited")
+    _sheet(make_grabbed_frames(),    "grabbed")
+    _sheet(make_dance_frames(),      "dance")
+    # Phase 1: new expressive animations
+    _sheet(make_sit_frames(True),    "sit_right")
+    _sheet(make_sit_frames(False),   "sit_left")
+    _sheet(make_jump_frames(True),   "jump_right")
+    _sheet(make_jump_frames(False),  "jump_left")
+    _sheet(make_paw_frames(True),    "paw_right")
+    _sheet(make_paw_frames(False),   "paw_left")
+    _sheet(make_scratch_frames(),    "scratch")
+    _sheet(make_stretch_frames(),    "stretch")
     print(f"\nDone -> {SPRITE_DIR}")
 
 

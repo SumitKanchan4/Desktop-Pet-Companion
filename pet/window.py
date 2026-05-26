@@ -23,7 +23,7 @@ import win32gui
 from PyQt6.QtCore import (
     Qt, QTimer, QPoint, QRect, QSize, pyqtSlot, pyqtSignal
 )
-from PyQt6.QtGui import QPixmap, QPainter, QColor, QFont, QFontMetrics
+from PyQt6.QtGui import QPixmap, QPainter, QColor, QFont, QFontMetrics, QPen, QPainterPath
 from PyQt6.QtWidgets import QWidget, QApplication, QInputDialog, QLineEdit
 
 from pet.brain import PetBrain, PetState, STATE_SPRITE, DIRECTIONAL_STATES
@@ -168,6 +168,9 @@ class PetWindow(QWidget):
         self._jump_gravity  = 1.5   # px/tick² acceleration downward
         self._jump_origin_y = 0     # Y position before jump started
 
+        # Live tail wag
+        self._tail_phase = 0.0
+
         # Window setup
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground)
@@ -226,6 +229,8 @@ class PetWindow(QWidget):
             frame = sheet.frame(self._frame_idx)
             painter.drawPixmap(0, self._bubble_offset_y, frame)
 
+        self._draw_tail(painter)
+
         if self._bubble and self._bubble.remaining > 0:
             self._draw_bubble(painter)
 
@@ -241,6 +246,83 @@ class PetWindow(QWidget):
             painter.drawText(hx, hy + 20, "\U0001f91a\U0001f3fb")
 
         painter.end()
+
+    # ------------------------------------------------------------------ #
+    # Live tail                                                            #
+    # ------------------------------------------------------------------ #
+
+    def _tail_wag_speed(self) -> float:
+        """Radians added to tail phase each animation frame."""
+        state = self._brain.state
+        if state == PetState.SLEEP:
+            return 0.0
+        if state in (PetState.EXCITED, PetState.DANCE):
+            return 0.35
+        if state in (PetState.WALK, PetState.RUN, PetState.JUMP):
+            return 0.22
+        if state in (PetState.SIT, PetState.SCRATCH):
+            return 0.07
+        return 0.14   # IDLE, WATCH, GRABBED, PAW, STRETCH
+
+    def _tail_wag_amp(self) -> float:
+        """Peak pixel swing of the tail tip."""
+        state = self._brain.state
+        if state == PetState.SLEEP:
+            return 0.0
+        if state in (PetState.EXCITED, PetState.DANCE):
+            return 20.0
+        if state in (PetState.WALK, PetState.RUN, PetState.JUMP):
+            return 14.0
+        if state == PetState.SIT:
+            return 8.0
+        return 11.0
+
+    def _draw_tail(self, painter: QPainter) -> None:
+        """Overlay a smooth bezier tail that wags live, independent of sprite."""
+        import math
+
+        amp  = self._tail_wag_amp()
+        wag  = math.sin(self._tail_phase) * amp
+        oy   = self._bubble_offset_y
+        pw   = self.FRAME_W * self.SCALE   # 112
+        state = self._brain.state
+
+        if self._facing_right:
+            bx, by = 18, 52 + oy          # rear haunch base (aligns with pixel art)
+            if state == PetState.SLEEP:   # drooped: tail hangs down
+                cx, cy = 8,  60 + oy
+                tx, ty = 5,  65 + oy
+            else:
+                cx, cy = 8,  38 + oy + wag * 0.45
+                tx, ty = 10, 26 + oy + wag
+        else:
+            bx, by = pw - 18, 52 + oy
+            if state == PetState.SLEEP:
+                cx, cy = pw - 8,  60 + oy
+                tx, ty = pw - 5,  65 + oy
+            else:
+                cx, cy = pw - 8,  38 + oy + wag * 0.45
+                tx, ty = pw - 10, 26 + oy + wag
+
+        path = QPainterPath()
+        path.moveTo(bx, by)
+        path.quadTo(cx, cy, tx, ty)
+
+        # Brown body-colour stroke
+        pen = QPen(QColor(110, 65, 18, 210), 5)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        painter.setPen(pen)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawPath(path)
+
+        # Cream/white fluffy tip — last 40 % of the tail
+        tip_pen = QPen(QColor(240, 228, 196, 200), 4)
+        tip_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        painter.setPen(tip_pen)
+        tip_path = QPainterPath()
+        tip_path.moveTo(cx + (tx - cx) * 0.6, cy + (ty - cy) * 0.6)
+        tip_path.lineTo(tx, ty)
+        painter.drawPath(tip_path)
 
     def _draw_bubble(self, painter: QPainter) -> None:
         bubble = self._bubble
@@ -299,6 +381,7 @@ class PetWindow(QWidget):
         sheet = self._sheets.get(self._current_sheet_key())
         if sheet:
             self._frame_idx = (self._frame_idx + 1) % len(sheet)
+        self._tail_phase += self._tail_wag_speed()
         self.update()
 
     # ------------------------------------------------------------------ #

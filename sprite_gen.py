@@ -163,7 +163,6 @@ def _mk(bx=BX0, by=BY0, phase=0, wag=0, droop=False,
     by2 = by + bob
     hx  = bx + 14
     hy  = by2 - 14
-    _tail(d, bx, by2, wag=wag, droop=droop)
     _body(d, bx, by2, sx=sx)
     _ear(d, hx, hy)               # ear drawn BEFORE head
     _collar(d, hx, by2)
@@ -261,16 +260,6 @@ def make_sit_frames(fr=True):
         hx, hy = bx + 14, by - 15   # head slightly higher (sitting upright)
         wag_v = [0, 2, 4, -2, -4, 1][i]
 
-        # Tail curves upward over back when sitting (not drooped)
-        tx = bx - 12
-        ty = by - 1
-        pts_t = [(tx, ty), (max(0, tx - 2), ty - 8), (tx + 2 + wag_v, by - 15)]
-        d.line(pts_t, fill=OTL, width=7)
-        d.line(pts_t, fill=FUR, width=5)
-        d.line(pts_t, fill=HFU, width=2)
-        _e(d, pts_t[-1][0], pts_t[-1][1], 5, 5, HFU, OTL)
-        _e(d, pts_t[-1][0], pts_t[-1][1], 3, 3, CHI)
-
         # Compact body (slightly taller proportion for a sitting dog)
         d.ellipse([bx - 11, by - 10, bx + 13, by + 9], fill=OTL)
         d.ellipse([bx - 10, by - 9,  bx + 12, by + 8], fill=FUR)
@@ -328,7 +317,6 @@ def make_paw_frames(fr=True):
         img, d = _f()
         bx, by = BX0, BY0
         hx, hy = bx + 14, by - 14
-        _tail(d, bx, by, wag=3, droop=True)
         _body(d, bx, by)
         _ear(d, hx, hy)
         _collar(d, hx, by)
@@ -361,7 +349,6 @@ def make_scratch_frames():
         img, d = _f()
         bx, by = BX0, BY0
         hx, hy = bx + 14, by - 14
-        _tail(d, bx, by, wag=[2, 0, -2, 0][i], droop=True)
         _body(d, bx, by)
         _ear(d, hx, hy)
         _collar(d, hx, by)
@@ -396,7 +383,6 @@ def make_stretch_frames():
         by = BY0 + 2
         hx = bx + 14 + sx // 2
         hy = by - 12 + hdip   # head dips slightly during stretch
-        _tail(d, max(1, bx - sx // 2), by, wag=0, droop=True)
         _body(d, bx, by, sx=sx)
 
         # Front paws extended forward flat

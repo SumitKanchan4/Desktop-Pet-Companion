@@ -47,11 +47,7 @@ from skills.play_skill import PlaySkill
 from skills.social_skill import SocialSkill
 from skills.commentary_skill import CommentarySkill
 from skills.chain_skill import ChainSkill
-
-
-CONFIG_PATH   = Path(__file__).parent / "config.yaml"
-EXAMPLE_PATH  = Path(__file__).parent / "config.example.yaml"
-SPRITES_DIR   = Path(__file__).parent / "assets" / "sprites"
+from system.paths import CONFIG_PATH, CONFIG_EXAMPLE_PATH as EXAMPLE_PATH, SPRITES_DIR
 
 
 def load_config() -> dict:

@@ -12,7 +12,8 @@ from PyQt6.QtWidgets import QSystemTrayIcon, QMenu
 
 def _make_tray_icon() -> QIcon:
     """Creates a simple coloured paw icon if no icon file exists."""
-    icon_path = Path(__file__).parent.parent / "assets" / "tray_icon.png"
+    from system.paths import TRAY_ICON_PATH
+    icon_path = TRAY_ICON_PATH
     if icon_path.exists():
         return QIcon(str(icon_path))
     px = QPixmap(32, 32)

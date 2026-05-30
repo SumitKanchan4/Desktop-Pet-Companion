@@ -29,8 +29,7 @@ from PyQt6.QtWidgets import QWidget, QApplication, QInputDialog, QLineEdit
 from pet.brain import PetBrain, PetState, STATE_SPRITE, DIRECTIONAL_STATES
 from system.throttle import ThrottleLevel
 from audio import engine as sound_engine
-
-ASSETS = Path(__file__).parent.parent / "assets" / "sprites"
+from system.paths import SPRITES_DIR as ASSETS
 
 
 class SpeechBubble:

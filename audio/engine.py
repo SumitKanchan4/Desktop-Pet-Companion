@@ -32,7 +32,8 @@ except ImportError:
 
 SAMPLE_RATE = 22050
 
-_BARK_WAV_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets", "bark.wav")
+from system.paths import BARK_WAV_PATH as _BARK_WAV_PATH_OBJ
+_BARK_WAV_PATH = str(_BARK_WAV_PATH_OBJ)
 
 
 def is_available() -> bool:

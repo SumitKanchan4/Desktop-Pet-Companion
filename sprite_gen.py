@@ -12,7 +12,7 @@ Side-view golden retriever.  Key dog silhouette features:
 from pathlib import Path
 from PIL import Image, ImageDraw
 
-SPRITE_DIR = Path(__file__).parent / "assets" / "sprites"
+from system.paths import SPRITES_DIR as SPRITE_DIR
 FW, FH = 56, 48   # 56 wide gives tail room on left; SCALE=2 -> 112x96 on screen
 
 # ── Palette ───────────────────────────────────────────────────────────────────

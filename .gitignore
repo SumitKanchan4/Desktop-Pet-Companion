@@ -28,3 +28,8 @@ desktop.ini
 
 # User config — contains personal name and API keys; never commit
 config.yaml
+
+# Runtime artefacts
+*.log
+*.tmp
+out.txt

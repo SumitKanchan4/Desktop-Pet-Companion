@@ -67,7 +67,7 @@ class WeatherData:
         if self.is_rainy():
             return (f"It's {c.lower()} outside 🌧️  Perfect stay-in-and-code weather!", "none")
         if self.is_freezing():
-            return (f"It's {self.temp_c:.0f}°C outside!! 🥶 *shivers* Stay warm, Sumit!", "none")
+            return (f"It's {self.temp_c:.0f}°C outside!! 🥶 *shivers* Stay warm!", "none")
         if self.is_cold():
             return (f"Brr! Only {self.temp_c:.0f}°C out there 🧥 Blanket weather!", "none")
         if self.is_hot():

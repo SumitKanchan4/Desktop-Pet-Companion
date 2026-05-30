@@ -5,17 +5,18 @@ __pycache__/
 *.pyd
 .Python
 *.egg-info/
-dist/
-build/
-*.spec
 
 # Env
 .venv/
 venv/
 env/
 
-# PyInstaller
+# PyInstaller / Inno Setup build artefacts
+# (keep the source files in build/ but ignore generated output)
 dist/
+build/Buddy/
+build/Output/
+build/__pycache__/
 *.exe
 
 # IDE
@@ -33,3 +34,4 @@ config.yaml
 *.log
 *.tmp
 out.txt
+

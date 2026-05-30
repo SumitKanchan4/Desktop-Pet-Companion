@@ -25,17 +25,29 @@ Buddy wanders, sleeps, plays fetch, reads your screen (locally!), reacts to noti
 ## 📦 Requirements
 
 - **Windows 10/11**
-- **Python 3.11+**
-- **[Ollama](https://ollama.com)** running locally
-- ~3 GB free disk space for the smallest models
+- **[Ollama](https://ollama.com)** (the installer will detect it and offer to open the download page if missing)
+- ~3 GB free disk space for the smallest AI model
 
 ---
 
-## 🚀 Setup
+## 🚀 Install
+
+### Option A — Download installer (recommended)
+
+1. Grab the latest **`BuddySetup-x.y.z.exe`** from the [Releases page](https://github.com/sumitkanchan4/desktop-pet/releases/latest).
+2. Double-click it and follow the wizard:
+   - **Ollama check** — detects Ollama or opens the download page for you.
+   - **Model picker** — choose a text model (default `gemma3:1b`, ~700 MB) and optionally a vision model (default `moondream`, ~1.7 GB).
+   - Optional: add a desktop shortcut and/or auto-launch on Windows startup.
+3. The installer pulls the selected Ollama models in a console window, then launches Buddy.
+
+That's it — no Python or terminal needed.
+
+### Option B — Run from source
 
 ```powershell
 # 1. Clone
-git clone https://github.com/<your-username>/desktop-pet.git
+git clone https://github.com/sumitkanchan4/desktop-pet.git
 cd desktop-pet
 
 # 2. Virtual env
@@ -54,6 +66,14 @@ python main.py
 ```
 
 On first launch, `config.example.yaml` is auto-copied to `config.yaml`, and a friendly dialog asks for your name.
+
+### Option C — Build the installer yourself
+
+```powershell
+# Requires Python 3.11+ and Inno Setup 6 (https://jrsoftware.org/isdl.php)
+.\build\build.ps1 -Installer -Version 0.1.0
+# Output:  build\Output\BuddySetup-0.1.0.exe
+```
 
 ---
 

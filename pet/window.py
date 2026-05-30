@@ -24,33 +24,14 @@ from PyQt6.QtCore import (
     Qt, QTimer, QPoint, QRect, QSize, pyqtSlot, pyqtSignal
 )
 from PyQt6.QtGui import QPixmap, QPainter, QColor, QFont, QFontMetrics, QPen, QPainterPath
-from PyQt6.QtWidgets import QWidget, QApplication, QInputDialog, QLineEdit
+from PyQt6.QtWidgets import QWidget, QApplication
 
 from pet.brain import PetBrain, PetState, STATE_SPRITE, DIRECTIONAL_STATES
 from system.throttle import ThrottleLevel
 from audio import engine as sound_engine
 from system.paths import SPRITES_DIR as ASSETS
-
-
-class SpeechBubble:
-    """Renders a speech bubble above the pet."""
-
-    def __init__(self, text: str, duration_ms: int = 5000) -> None:
-        self.text       = text
-        self.duration_ms = duration_ms
-        self.remaining  = duration_ms
-
-    def tick(self, elapsed_ms: int) -> bool:
-        """Returns True while still alive."""
-        self.remaining -= elapsed_ms
-        return self.remaining > 0
-
-    @property
-    def alpha(self) -> int:
-        """Fade out in last 800ms."""
-        if self.remaining < 800:
-            return max(0, int(255 * self.remaining / 800))
-        return 255
+from ui.bubble_widget import BubbleWidget
+from ui.chat_bar import ChatBar
 
 
 class SpriteSheet:
@@ -135,17 +116,23 @@ class PetWindow(QWidget):
         self._move_timer.timeout.connect(self._move_tick)
         self._move_timer.start(50)
 
-        # Speech bubble
-        self._bubble: SpeechBubble | None = None
-        self._bubble_timer = QTimer(self)
-        self._bubble_timer.timeout.connect(self._bubble_tick)
+        # Speech bubble (overlay widget — replaces the old painted-on bubble)
+        self._bubble_widget = BubbleWidget(self)
+
+        # Chat bar (floating input)
+        self._chat_bar = ChatBar()
+        self._chat_bar.anchor_to(self)
+
+        # Keep a back-compat reference so external code that checks
+        # `self._window._bubble` (e.g. skill guards) still works.
+        # The property below maps to the widget's visibility.
+        self._bubble: bool = False
 
         # Drag state
         self._drag_offset = QPoint(0, 0)
         self._is_dragging = False
         self._press_time  = 0.0    # monotonic timestamp of last mouse-press
-        self._bubble_offset_y = 0  # how much window was shifted up for bubble
-        self._hovered     = False  # True while cursor is over pet or bubble
+        self._hovered     = False  # True while cursor is over pet
 
         # Petting hand animation
         self._petting_active = False
@@ -177,6 +164,9 @@ class PetWindow(QWidget):
         sprite_size = QSize(self.FRAME_W * self.SCALE, self.FRAME_H * self.SCALE)
         self.resize(sprite_size)
         self.move(self._pos)
+
+        # Keep _bubble sentinel in sync with BubbleWidget visibility
+        self._bubble_widget.destroyed.connect(lambda: setattr(self, '_bubble', False))
 
     def showEvent(self, event) -> None:
         super().showEvent(event)
@@ -226,12 +216,9 @@ class PetWindow(QWidget):
         sheet = self._sheets.get(self._current_sheet_key())
         if sheet:
             frame = sheet.frame(self._frame_idx)
-            painter.drawPixmap(0, self._bubble_offset_y, frame)
+            painter.drawPixmap(0, 0, frame)
 
         self._draw_tail(painter)
-
-        if self._bubble and self._bubble.remaining > 0:
-            self._draw_bubble(painter)
 
         # Petting hand drawn over the sprite while mouse is held
         if self._petting_active:
@@ -239,7 +226,7 @@ class PetWindow(QWidget):
             pw = self.FRAME_W * self.SCALE
             ph = self.FRAME_H * self.SCALE
             hx = pw // 2 - 8 + int(math.sin(self._pet_phase) * 22)
-            hy = self._bubble_offset_y + int(ph * 0.08)
+            hy = int(ph * 0.08)
             painter.setFont(QFont("Segoe UI Emoji", 15))
             painter.setPen(Qt.PenStyle.NoPen)
             painter.drawText(hx, hy + 20, "\U0001f91a\U0001f3fb")
@@ -282,7 +269,7 @@ class PetWindow(QWidget):
 
         amp  = self._tail_wag_amp()
         wag  = math.sin(self._tail_phase) * amp
-        oy   = self._bubble_offset_y
+        oy   = 0
         pw   = self.FRAME_W * self.SCALE   # 112
         state = self._brain.state
 
@@ -322,54 +309,6 @@ class PetWindow(QWidget):
         tip_path.moveTo(cx + (tx - cx) * 0.6, cy + (ty - cy) * 0.6)
         tip_path.lineTo(tx, ty)
         painter.drawPath(tip_path)
-
-    def _draw_bubble(self, painter: QPainter) -> None:
-        bubble = self._bubble
-        font = QFont("Segoe UI", 9)
-        painter.setFont(font)
-        fm = QFontMetrics(font)
-        text  = bubble.text
-        max_w = 220
-        # Word-wrap manually
-        lines: list[str] = []
-        words = text.split()
-        line  = ""
-        for w in words:
-            test = (line + " " + w).strip()
-            if fm.horizontalAdvance(test) > max_w:
-                lines.append(line)
-                line = w
-            else:
-                line = test
-        if line:
-            lines.append(line)
-
-        line_h  = fm.height() + 2
-        pad     = 8
-        bw      = max(fm.horizontalAdvance(l) for l in lines) + pad * 2
-        bh      = line_h * len(lines) + pad * 2
-        bx      = max(0, (self.width() - bw) // 2)
-
-        # Always draw bubble in lower portion of window (sprite is at offset_y)
-        sprite_h = self.FRAME_H * self.SCALE
-        if self._bubble_offset_y > 0:
-            # Bubble is ABOVE sprite (window shifted up): draw at top
-            by = 6
-        else:
-            # Bubble is BELOW sprite: draw after sprite
-            by = sprite_h + 8
-
-        alpha = bubble.alpha
-        bg    = QColor(255, 255, 220, min(220, alpha))
-        border= QColor(100, 80, 40, alpha)
-
-        painter.setBrush(bg)
-        painter.setPen(border)
-        painter.drawRoundedRect(bx, by, bw, bh, 8, 8)
-
-        painter.setPen(QColor(40, 30, 10, alpha))
-        for i, l in enumerate(lines):
-            painter.drawText(bx + pad, by + pad + fm.ascent() + i * line_h, l)
 
     # ------------------------------------------------------------------ #
     # Animation timer                                                      #
@@ -653,23 +592,13 @@ class PetWindow(QWidget):
             self._brain.on_grab_end()
             self._brain.on_click()
             self._frame_idx = 0
-            # Dialog must be WindowStaysOnTopHint or it hides behind the pet
-            dlg = QInputDialog()
-            dlg.setWindowFlags(
-                Qt.WindowType.Dialog | Qt.WindowType.WindowStaysOnTopHint
-            )
-            dlg.setWindowTitle("Talk to Buddy 🐾")
-            dlg.setLabelText("Say something to Buddy:")
-            dlg.setInputMode(QInputDialog.InputMode.TextInput)
-            dlg.setTextEchoMode(QLineEdit.EchoMode.Normal)
-            dlg.resize(360, 120)
-            dlg.activateWindow()
-            dlg.raise_()
-            if dlg.exec():
-                text = dlg.textValue().strip()
+            # Open floating chat bar instead of blocking QInputDialog
+            if self._chat_bar.isVisible():
+                self._chat_bar.popup()   # re-focus if already open
             else:
-                text = ""
-            self.double_clicked.emit(text)
+                self._chat_bar.popup()
+                # Emit empty string so caller knows a chat session started
+                # (the bar emits message_sent when user presses Enter)
 
     # ------------------------------------------------------------------ #
     # Speech bubble                                                        #
@@ -677,64 +606,19 @@ class PetWindow(QWidget):
 
     def say(self, text: str, duration_ms: int = 9000, sound: str = "bark") -> None:
         """Show a speech bubble. sound='bark'|'yip'|'whimper'|'none'."""
-        # Play the attention sound
         if sound == "bark":
             sound_engine.bark()
         elif sound == "yip":
             sound_engine.excited_yip()
         elif sound == "whimper":
             sound_engine.whimper()
-        self._bubble = SpeechBubble(text, duration_ms)
-        self._bubble_timer.start(100)
-        # Compute bubble dimensions
-        font = QFont("Segoe UI", 9)
-        fm = QFontMetrics(font)
-        max_w = 240
-        words = text.split()
-        lines, line = [], ""
-        for w in words:
-            test = (line + " " + w).strip()
-            if fm.horizontalAdvance(test) > max_w:
-                lines.append(line); line = w
-            else:
-                line = test
-        if line:
-            lines.append(line)
-        bw = max(fm.horizontalAdvance(l) for l in lines) + 20
-        bh = (fm.height() + 2) * len(lines) + 20
-        sprite_w = self.FRAME_W * self.SCALE
-        sprite_h = self.FRAME_H * self.SCALE
-        win_w = max(sprite_w, bw + 10)
-        win_h = sprite_h + bh + 16
-        # If pet is in bottom half of screen, shift window up so bubble shows above
-        screen_h = self._screen_rect.height()
-        if self._pos.y() + sprite_h + bh + 16 > screen_h - 20:
-            # Draw bubble above: move window up by bubble height
-            new_y = max(0, self._pos.y() - bh - 16)
-            self._bubble_offset_y = self._pos.y() - new_y
-            self.move(self._pos.x(), new_y)
-            self.resize(win_w, win_h)
-        else:
-            self._bubble_offset_y = 0
-            self.resize(win_w, win_h)
-        self.update()
+        self._bubble = True
+        self._bubble_widget.show_text(text, duration_ms)
+        # Update sentinel when bubble hides
+        def _clear_bubble():
+            self._bubble = False
+        self._bubble_widget._anim_out_a.finished.connect(_clear_bubble)
 
-    @pyqtSlot()
-    def _bubble_tick(self) -> None:
-        # Pause countdown while the cursor is over the pet/bubble
-        if self._hovered:
-            # Keep opacity full so text stays readable
-            if self._bubble and self._bubble.remaining < 1200:
-                self._bubble.remaining = 1200
-            self.update()
-            return
-        if self._bubble and not self._bubble.tick(100):
-            self._bubble = None
-            self._bubble_offset_y = 0
-            self._bubble_timer.stop()
-            self.move(self._pos)
-            self.resize(self.FRAME_W * self.SCALE, self.FRAME_H * self.SCALE)
-        self.update()
     # ------------------------------------------------------------------ #
     # Throttle response                                                    #
     # ------------------------------------------------------------------ #

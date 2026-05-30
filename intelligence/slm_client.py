@@ -6,6 +6,7 @@ Falls back gracefully if Ollama is not running or model not pulled.
 
 from __future__ import annotations
 import json
+import time
 import urllib.request
 import urllib.error
 from collections import deque
@@ -16,8 +17,14 @@ from PyQt6.QtCore import QObject, QThread, pyqtSignal
 
 OLLAMA_BASE = "http://localhost:11434"
 
+# ── Cached availability (never block the main thread) ─────────────────────────
+# The last known result + timestamp. Refreshed in a background thread.
+_avail_cache: dict = {"ok": False, "ts": 0.0}
+_AVAIL_TTL = 10.0   # seconds before re-checking
+
 
 def _ollama_available() -> bool:
+    """Blocking check — only call from a background thread."""
     try:
         with urllib.request.urlopen(f"{OLLAMA_BASE}/api/tags", timeout=3):
             return True
@@ -25,8 +32,27 @@ def _ollama_available() -> bool:
         return False
 
 
+def _cached_available() -> bool:
+    """Non-blocking: returns last known status. Never waits."""
+    return _avail_cache["ok"]
+
+
+def _refresh_availability_async() -> None:
+    """Spin a daemon thread to update the cache without blocking the caller."""
+    import threading
+
+    def _check() -> None:
+        result = _ollama_available()
+        _avail_cache["ok"] = result
+        _avail_cache["ts"] = time.monotonic()
+
+    t = threading.Thread(target=_check, daemon=True)
+    t.start()
+
+
 def list_ollama_models() -> list[str]:
-    """Return names of models currently pulled in Ollama, or [] if unreachable."""
+    """Return names of models currently pulled in Ollama, or [] if unreachable.
+    Blocking — only call from a background thread or at user request."""
     try:
         with urllib.request.urlopen(f"{OLLAMA_BASE}/api/tags", timeout=3) as resp:
             data = json.loads(resp.read())
@@ -107,6 +133,9 @@ class SLMClient(QObject):
         self._mood_desc = ""
         self._system_prompt = self._make_system_prompt()
         self._history: deque[tuple[str, str]] = deque(maxlen=5)  # (user_msg, buddy_reply)
+        # Prime the availability cache immediately (daemon thread, won't block startup)
+        if self._enabled:
+            _refresh_availability_async()
 
     def _make_system_prompt(self) -> str:
         from datetime import datetime
@@ -147,7 +176,9 @@ class SLMClient(QObject):
 
     @property
     def available(self) -> bool:
-        return self._enabled and _ollama_available()
+        """Non-blocking — returns last cached status.
+        The cache is primed at construction and refreshed after every ask()."""
+        return self._enabled and _cached_available()
 
     def ask(self, prompt: str, on_done: Callable[[str], None],
             on_error: Callable[[str], None] | None = None,
@@ -165,9 +196,13 @@ class SLMClient(QObject):
                 on_error("SLM disabled")
             return
 
-        # Check availability (fast, 3s timeout)
-        if not _ollama_available():
-            print("[SLM] Ollama not reachable")
+        # Stale or never-checked: kick off a background refresh.
+        # If cache says unavailable, invoke on_error immediately (non-blocking).
+        age = time.monotonic() - _avail_cache["ts"]
+        if age > _AVAIL_TTL:
+            _refresh_availability_async()
+        if not _cached_available():
+            print("[SLM] Ollama not reachable (cached)")
             if on_error:
                 on_error("Ollama not running")
             return
@@ -225,11 +260,13 @@ class SLMClient(QObject):
     def _done(self, text: str, callback: Callable[[str], None],
               user_turn: str | None = None) -> None:
         self._busy = False
-        # Store exchange in history
         if user_turn is not None:
             self._history.append((user_turn, text))
         self._cleanup()
         callback(text)
+        # Ollama clearly reachable — refresh cache so next ask() is instant
+        _avail_cache["ok"] = True
+        _avail_cache["ts"] = time.monotonic()
 
     def _fail(self, err: str, callback: Callable[[str], None] | None) -> None:
         self._busy = False

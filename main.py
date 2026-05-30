@@ -49,6 +49,7 @@ from skills.commentary_skill import CommentarySkill
 from skills.chain_skill import ChainSkill
 from system.paths import CONFIG_PATH, CONFIG_EXAMPLE_PATH as EXAMPLE_PATH, SPRITES_DIR
 from ui.settings_dialog import SettingsDialog
+from ui.fonts import load_app_fonts
 
 
 def load_config() -> dict:
@@ -164,10 +165,13 @@ class PetApp:
         self._ctx.context_changed.connect(self._brain.on_context_changed)
         self._ctx.context_changed.connect(self._comment.on_context_changed)
 
-        # Window events
+        # Window events — double_clicked now only fires for non-chat-bar usage
         self._window.double_clicked.connect(self._on_pet_clicked)
         self._window.treat_reached.connect(self._play.on_treat_reached)
         self._window.petted.connect(self._social.on_petted)
+
+        # Chat bar — floating input widget
+        self._window._chat_bar.message_sent.connect(self._on_chat_message)
 
         # Mood shifts
         self._mood.mood_changed.connect(self._social.on_mood_changed)
@@ -256,18 +260,30 @@ class PetApp:
     # ── Remaining app-level handlers ──────────────────────────────────────────
 
     def _on_pet_clicked(self, user_text: str) -> None:
-        self._mood.on_interacted()
-        prompt = (
-            f"The user said to you: \"{user_text}\". Respond in character."
-            if user_text else
-            "The user just double-clicked and poked you. React cutely."
-        )
-
-        def _fallback(err: str = "") -> None:
+        """Handles fallback double-click (empty emit or future use)."""
+        if user_text:
+            self._on_chat_message(user_text)
+        else:
+            self._mood.on_interacted()
             self._window.say(random.choice(["Woof! 🐾", "Bork bork!", "*wags tail furiously*", "Pat me more!"]))
 
+    def _on_chat_message(self, user_text: str) -> None:
+        """Handle a message from the chat bar."""
+        self._mood.on_interacted()
+        prompt = f'The user said to you: "{user_text}". Respond in character.'
+        chat_bar = self._window._chat_bar
+
+        def _on_reply(text: str) -> None:
+            self._window.say(text)
+            chat_bar.clear_typing()
+
+        def _fallback(err: str = "") -> None:
+            reply = random.choice(["Woof! 🐾", "Bork bork!", "*wags tail furiously*", "Pat me more!"])
+            self._window.say(reply)
+            chat_bar.clear_typing()
+
         if self._slm.available:
-            self._slm.ask(prompt, on_done=self._window.say, on_error=_fallback)
+            self._slm.ask(prompt, on_done=_on_reply, on_error=_fallback)
         else:
             _fallback()
 
@@ -299,6 +315,7 @@ class PetApp:
 def main() -> None:
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
+    load_app_fonts()  # register Nunito (if TTFs present) before any widget creation
 
     cfg = load_config()
     ensure_sprites()

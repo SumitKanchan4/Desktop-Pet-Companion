@@ -50,6 +50,9 @@ from skills.chain_skill import ChainSkill
 from system.paths import CONFIG_PATH, CONFIG_EXAMPLE_PATH as EXAMPLE_PATH, SPRITES_DIR
 from ui.settings_dialog import SettingsDialog
 from ui.fonts import load_app_fonts
+from system.version import APP_VERSION, GITHUB_REPO
+from system.updater import UpdateChecker
+import system.autostart as _autostart
 
 
 def load_config() -> dict:
@@ -187,6 +190,7 @@ class PetApp:
         self._tray.vision_requested.connect(self._vision.do_peek)
         self._tray.chain_toggled.connect(self._chain.on_chain_toggled)
         self._tray.settings_requested.connect(self._open_settings)
+        self._tray.about_requested.connect(self._open_about)
 
         # Notifications
         self._notif.new_notification.connect(
@@ -252,6 +256,14 @@ class PetApp:
         # Startup greeting after 2 s
         QTimer.singleShot(2000, lambda: self._comment.greet(self._weather.data))
 
+        # Auto-update check (daemon thread, only if enabled in config)
+        if self._cfg.get("app", {}).get("auto_update", True):
+            self._updater = UpdateChecker()
+            self._updater.download_started.connect(self._on_update_download_started)
+            self._updater.download_complete.connect(self._on_update_ready)
+            self._updater.download_failed.connect(self._on_update_failed)
+            self._updater.start()
+
     def show(self) -> None:
         self._window.show()
         self._monitor.start()
@@ -296,6 +308,59 @@ class PetApp:
         dlg = SettingsDialog(self._cfg)
         dlg.settings_saved.connect(self._apply_settings)
         dlg.exec()
+
+    def _open_about(self) -> None:
+        """Show a simple About dialog."""
+        from PyQt6.QtWidgets import QMessageBox
+        msg = QMessageBox()
+        msg.setWindowTitle("About Buddy")
+        msg.setWindowFlags(
+            msg.windowFlags() | Qt.WindowType.WindowStaysOnTopHint
+        )
+        msg.setIconPixmap(
+            msg.style().standardPixmap(
+                msg.style().StandardPixmap.SP_MessageBoxInformation
+            )
+        )
+        msg.setText(
+            f"<b>Desktop Pet — Buddy 🐾</b><br>"
+            f"Version {APP_VERSION}"
+        )
+        msg.setInformativeText(
+            "A playful AI-powered desktop companion.<br><br>"
+            f'<a href="https://github.com/{GITHUB_REPO}">github.com/{GITHUB_REPO}</a><br><br>'
+            "© 2025 Sumit Kanchan &nbsp;|&nbsp; MIT License"
+        )
+        msg.setTextFormat(Qt.TextFormat.RichText)
+        msg.exec()
+
+    def _on_update_download_started(self, version: str) -> None:
+        """Called when the installer download begins."""
+        self._window.say(f"Downloading update {version}… I'll let you know when it's ready! 📦")
+
+    def _on_update_ready(self, version: str, installer_path: str) -> None:
+        """Installer downloaded — ask user to install now or later."""
+        from PyQt6.QtWidgets import QMessageBox, QPushButton
+        self._tray.notify("Buddy — Update ready", f"Version {version} downloaded. Click to install.")
+
+        msg = QMessageBox()
+        msg.setWindowTitle("Buddy — Update Ready")
+        msg.setWindowFlags(msg.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
+        msg.setText(f"<b>Version {version} is ready to install.</b>")
+        msg.setInformativeText(
+            "Buddy will close and the installer will launch.\n"
+            "Your settings and config are kept."
+        )
+        install_btn = msg.addButton("Install now", QMessageBox.ButtonRole.AcceptRole)
+        msg.addButton("Later", QMessageBox.ButtonRole.RejectRole)
+        msg.exec()
+
+        if msg.clickedButton() is install_btn:
+            UpdateChecker.launch_installer(installer_path)
+
+    def _on_update_failed(self, version: str, reason: str) -> None:
+        """Download failed — log quietly, no user-facing noise."""
+        print(f"[updater] download failed for v{version}: {reason}")
 
     def _apply_settings(self, cfg: dict) -> None:
         """Persist updated config and propagate hot-applicable changes."""

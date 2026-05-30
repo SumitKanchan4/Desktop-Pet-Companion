@@ -29,15 +29,11 @@ pet:
   interaction_radius: 60  # Pixel radius for treat/cursor interactions
 
 
-# ── AI / SLM backend ──────────────────────────────────────────────────────────
+# ── AI (Ollama — local, private, free) ───────────────────────────────────────
+# Install Ollama: https://ollama.com
+# Pull the text model:   ollama pull gemma3:1b
+# Pull a vision model:   ollama pull moondream
 slm:
-  backend: ollama         # "ollama" (local) or "gemini" (cloud)
-
-  # ── Ollama (local, private, free) ─────────────────────────────────────────
-  # Install Ollama: https://ollama.com
-  # Pull the text model:   ollama pull gemma3:1b
-  # Pull a vision model:   ollama pull moondream
-  #
   text_model: gemma3:1b   # Any chat model pulled in Ollama
                           # Lighter options : gemma3:1b, phi3:mini, tinyllama
                           # Smarter options : gemma3:4b, llama3.2:3b, mistral
@@ -47,10 +43,6 @@ slm:
   vision_model: moondream # Preferred vision model (must be pulled in Ollama).
                           # Leave blank to auto-detect from pulled models.
                           # Options: moondream, llava, llava-phi3, gemma3:4b
-
-  # ── Gemini (cloud, needs API key) ─────────────────────────────────────────
-  # Get a free key at https://aistudio.google.com/apikey
-  gemini_api_key: ''      # Paste your key here — NEVER commit this file with a real key
 
   # ── Timing ────────────────────────────────────────────────────────────────
   response_timeout_s: 15          # Seconds before an SLM request is abandoned

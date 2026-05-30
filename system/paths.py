@@ -6,23 +6,31 @@ When frozen by PyInstaller, there are two distinct anchor points:
 
 * ``sys._MEIPASS`` — directory containing bundled (read-only) datas.
   In one-folder mode this is the ``_internal/`` folder next to the exe.
-* ``Path(sys.executable).parent`` — the install folder itself. The user's
-  writable ``config.yaml`` lives here so it survives reinstall and is easy
-  for users to find and edit.
+* ``%APPDATA%\\Buddy`` — writable user-data directory for config.yaml.
+  Using AppData means the app never needs write access to
+  ``C:\\Program Files`` and config survives reinstall / updates.
 
 In source mode both anchors collapse to the project root.
 """
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
 
 def _resolve_install_dir() -> Path:
-    """Directory holding the executable (or project root in source mode)."""
+    """Return the writable user-data directory.
+
+    Frozen (installed to C:\\Program Files):  %APPDATA%\\Buddy
+    Source mode:                               project root
+    """
     if getattr(sys, "frozen", False):
-        return Path(sys.executable).resolve().parent
+        appdata = os.environ.get("APPDATA") or os.path.expanduser("~")
+        data_dir = Path(appdata) / "Buddy"
+        data_dir.mkdir(parents=True, exist_ok=True)
+        return data_dir
     return Path(__file__).resolve().parent.parent
 
 

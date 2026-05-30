@@ -25,3 +25,6 @@ dist/
 # OS
 Thumbs.db
 desktop.ini
+
+# User config — contains personal name and API keys; never commit
+config.yaml

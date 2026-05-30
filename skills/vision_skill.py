@@ -14,12 +14,13 @@ class VisionSkill(QObject):
 
     _raw = pyqtSignal(str)   # background thread → Qt thread bridge
 
-    def __init__(self, window) -> None:
+    def __init__(self, cfg: dict, window) -> None:
         super().__init__()
         self._window      = window
         self._last_vision = 0.0
         self._manual      = False
         self._raw.connect(self._on_result)
+        screen_vision.configure(cfg)   # apply vision_model from config.yaml
 
     # ── Thread-safe callback ──────────────────────────────────────────────────
 

@@ -54,13 +54,29 @@ _PROMPT = (
 
 # ── Internal state ─────────────────────────────────────────────────────────────
 _cached_model: str | None = None   # discovered model, cached for speed
+_forced_model: str | None = None   # set from config.yaml vision_model key
 _discovery_lock = threading.Lock()
+
+
+def configure(cfg: dict) -> None:
+    """Read vision settings from the top-level config dict (call once at startup)."""
+    global _forced_model
+    slm_cfg = cfg.get("slm", {})
+    raw = slm_cfg.get("vision_model", "").strip()
+    if raw:
+        _forced_model = raw
+        log.info("[vision] Configured model from config.yaml: %s", _forced_model)
 
 
 # ── Model discovery ───────────────────────────────────────────────────────────
 
 def _discover_vision_model() -> str | None:
-    """Query Ollama /api/tags and return the first available vision model."""
+    """Return the vision model to use.
+
+    Priority:
+      1. config.yaml ``slm.vision_model`` (if set and pulled in Ollama)
+      2. First match from _VISION_MODELS preference list
+    """
     global _cached_model
     with _discovery_lock:
         if _cached_model:
@@ -73,7 +89,10 @@ def _discover_vision_model() -> str | None:
             log.warning("[vision] Ollama unreachable: %s", exc)
             return None
 
-        for preferred in _VISION_MODELS:
+        # Build ordered preference list: config override goes first
+        preference = ([_forced_model] if _forced_model else []) + _VISION_MODELS
+
+        for preferred in preference:
             pref_base = preferred.split(":")[0]
             pref_tag  = preferred.split(":")[1] if ":" in preferred else None
             for pulled_name in pulled:

@@ -49,11 +49,22 @@ from skills.commentary_skill import CommentarySkill
 from skills.chain_skill import ChainSkill
 
 
-CONFIG_PATH = Path(__file__).parent / "config.yaml"
-SPRITES_DIR = Path(__file__).parent / "assets" / "sprites"
+CONFIG_PATH   = Path(__file__).parent / "config.yaml"
+EXAMPLE_PATH  = Path(__file__).parent / "config.example.yaml"
+SPRITES_DIR   = Path(__file__).parent / "assets" / "sprites"
 
 
 def load_config() -> dict:
+    # First-run: auto-copy the example so the user has a working config.yaml
+    if not CONFIG_PATH.exists():
+        if EXAMPLE_PATH.exists():
+            import shutil
+            shutil.copy(EXAMPLE_PATH, CONFIG_PATH)
+        else:
+            raise FileNotFoundError(
+                "config.yaml not found. Copy config.example.yaml to config.yaml "
+                "and fill in your settings."
+            )
     with open(CONFIG_PATH, "r", encoding="utf-8") as f:
         return yaml.safe_load(f)
 
@@ -132,7 +143,7 @@ class PetApp:
 
         # ── Skills ────────────────────────────────────────────────────────────
         self._weather = WeatherSkill(self._window, self._slm)
-        self._vision  = VisionSkill(self._window)
+        self._vision  = VisionSkill(cfg, self._window)
         self._play    = PlaySkill(self._window, self._brain, self._mood, cfg, self._username)
         self._social  = SocialSkill(self._window, self._slm, self._mood, self._username)
         self._comment = CommentarySkill(

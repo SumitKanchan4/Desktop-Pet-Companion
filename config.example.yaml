@@ -1,0 +1,140 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Desktop Pet — Buddy  |  config.example.yaml
+#
+# Copy this file to config.yaml and fill in your values.
+# config.yaml is git-ignored so your API keys and personal details stay private.
+# On first run the app auto-copies this file to config.yaml for you.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+# ── User ──────────────────────────────────────────────────────────────────────
+user:
+  name: YourName          # Buddy will use this name in comments and greetings
+
+
+# ── Pet personality ───────────────────────────────────────────────────────────
+pet:
+  name: Buddy             # Display name (not currently shown on screen)
+  species: dog            # Kept for future multi-species support
+
+  # Movement
+  speed: 1.0              # Walk speed multiplier (0.5 = slow, 2.0 = hyper)
+  wander_interval_s: 5    # How often Buddy picks a new wander direction (seconds)
+
+  # Rendering
+  scale: 2                # Sprite scale factor: 2 → 112×96 px on screen
+  fps_full: 10            # Animation FPS at full throttle
+  fps_reduced: 5          # Animation FPS when CPU/RAM is tight
+
+  interaction_radius: 60  # Pixel radius for treat/cursor interactions
+
+
+# ── AI / SLM backend ──────────────────────────────────────────────────────────
+slm:
+  backend: ollama         # "ollama" (local) or "gemini" (cloud)
+
+  # ── Ollama (local, private, free) ─────────────────────────────────────────
+  # Install Ollama: https://ollama.com
+  # Pull the text model:   ollama pull gemma3:1b
+  # Pull a vision model:   ollama pull moondream
+  #
+  text_model: gemma3:1b   # Any chat model pulled in Ollama
+                          # Lighter options : gemma3:1b, phi3:mini, tinyllama
+                          # Smarter options : gemma3:4b, llama3.2:3b, mistral
+
+  # Vision (screen-reading) — requires a multimodal model
+  vision_enabled: false   # Set to true to enable screen-reading comments
+  vision_model: moondream # Preferred vision model (must be pulled in Ollama).
+                          # Leave blank to auto-detect from pulled models.
+                          # Options: moondream, llava, llava-phi3, gemma3:4b
+
+  # ── Gemini (cloud, needs API key) ─────────────────────────────────────────
+  # Get a free key at https://aistudio.google.com/apikey
+  gemini_api_key: ''      # Paste your key here — NEVER commit this file with a real key
+
+  # ── Timing ────────────────────────────────────────────────────────────────
+  response_timeout_s: 15          # Seconds before an SLM request is abandoned
+  behavior_update_interval_s: 120 # How often Buddy makes unprompted comments
+  screen_read_interval_s: 60      # Minimum gap between auto screen-peeks (seconds)
+
+
+# ── Window context detection ─────────────────────────────────────────────────
+# Maps foreground window process/title substrings → activity category.
+# Add your own apps under the matching category.
+context:
+  poll_interval_s: 1.5    # How often the active window is checked
+
+  rules:
+    browsing:
+      - chrome
+      - firefox
+      - msedge
+      - brave
+      - opera
+
+    coding:
+      - code
+      - pycharm
+      - idea
+      - notepad++
+      - sublime
+      - vim
+      - nvim
+      - cursor
+
+    gaming:
+      - steam
+      - game
+      - epic
+      - battle.net
+
+    meeting:
+      - zoom
+      - teams
+      - meet
+      - webex
+      - slack
+      - discord
+
+    music:
+      - spotify
+      - aimp
+      - foobar
+      - musicbee
+      - winamp
+
+    terminal:
+      - windowsterminal
+      - powershell
+      - cmd
+      - wt
+
+    watching:
+      - vlc
+      - mpv
+      - mpc
+      - netflix
+      - youtube
+      - prime
+      - hotstar
+      - disney
+
+
+# ── Resource throttling ───────────────────────────────────────────────────────
+# Buddy monitors CPU and RAM and reduces activity to avoid slowing your machine.
+# Levels: FULL → REDUCED → MINIMAL → SLEEP
+throttle:
+  check_interval_s: 10    # How often resource usage is sampled
+
+  full:                   # All features active
+    cpu_max: 40           # Drop to REDUCED if CPU % exceeds this
+    ram_free_min_gb: 2.0  # Drop to REDUCED if free RAM falls below this
+
+  reduced:                # Slower animations, fewer comments
+    cpu_max: 70
+    ram_free_min_gb: 1.0
+
+  minimal:                # Minimal movement, no SLM calls
+    cpu_max: 90
+    ram_free_min_gb: 0.5
+    # Above these limits → SLEEP (Buddy freezes until resources free up)

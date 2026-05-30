@@ -259,7 +259,9 @@ class PetApp:
         # Auto-update check (daemon thread, only if enabled in config)
         if self._cfg.get("app", {}).get("auto_update", True):
             self._updater = UpdateChecker()
-            self._updater.update_available.connect(self._on_update_available)
+            self._updater.download_started.connect(self._on_update_download_started)
+            self._updater.download_complete.connect(self._on_update_ready)
+            self._updater.download_failed.connect(self._on_update_failed)
             self._updater.start()
 
     def show(self) -> None:
@@ -332,16 +334,33 @@ class PetApp:
         msg.setTextFormat(Qt.TextFormat.RichText)
         msg.exec()
 
-    def _on_update_available(self, version: str, url: str) -> None:
-        """Notify the user that a newer release is available."""
-        self._window.say(
-            f"A new version ({version}) is available! 🎉 "
-            f"Download at github.com/{GITHUB_REPO}/releases"
+    def _on_update_download_started(self, version: str) -> None:
+        """Called when the installer download begins."""
+        self._window.say(f"Downloading update {version}… I'll let you know when it's ready! 📦")
+
+    def _on_update_ready(self, version: str, installer_path: str) -> None:
+        """Installer downloaded — ask user to install now or later."""
+        from PyQt6.QtWidgets import QMessageBox, QPushButton
+        self._tray.notify("Buddy — Update ready", f"Version {version} downloaded. Click to install.")
+
+        msg = QMessageBox()
+        msg.setWindowTitle("Buddy — Update Ready")
+        msg.setWindowFlags(msg.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
+        msg.setText(f"<b>Version {version} is ready to install.</b>")
+        msg.setInformativeText(
+            "Buddy will close and the installer will launch.\n"
+            "Your settings and config are kept."
         )
-        self._tray.notify(
-            "Buddy — Update available",
-            f"Version {version} is ready to download.",
-        )
+        install_btn = msg.addButton("Install now", QMessageBox.ButtonRole.AcceptRole)
+        msg.addButton("Later", QMessageBox.ButtonRole.RejectRole)
+        msg.exec()
+
+        if msg.clickedButton() is install_btn:
+            UpdateChecker.launch_installer(installer_path)
+
+    def _on_update_failed(self, version: str, reason: str) -> None:
+        """Download failed — log quietly, no user-facing noise."""
+        print(f"[updater] download failed for v{version}: {reason}")
 
     def _apply_settings(self, cfg: dict) -> None:
         """Persist updated config and propagate hot-applicable changes."""

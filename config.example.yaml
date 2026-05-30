@@ -9,7 +9,7 @@
 
 # ── User ──────────────────────────────────────────────────────────────────────
 user:
-  name: YourName          # Buddy will use this name in comments and greetings
+  name: ""               # Leave blank on first run — Buddy will ask you for it
 
 
 # ── Pet personality ───────────────────────────────────────────────────────────
@@ -34,6 +34,7 @@ pet:
 # Pull the text model:   ollama pull gemma3:1b
 # Pull a vision model:   ollama pull moondream
 slm:
+  backend: ollama         # "ollama" or "disabled"
   text_model: gemma3:1b   # Any chat model pulled in Ollama
                           # Lighter options : gemma3:1b, phi3:mini, tinyllama
                           # Smarter options : gemma3:4b, llama3.2:3b, mistral

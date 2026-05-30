@@ -25,6 +25,16 @@ def _ollama_available() -> bool:
         return False
 
 
+def list_ollama_models() -> list[str]:
+    """Return names of models currently pulled in Ollama, or [] if unreachable."""
+    try:
+        with urllib.request.urlopen(f"{OLLAMA_BASE}/api/tags", timeout=3) as resp:
+            data = json.loads(resp.read())
+        return sorted(m.get("name", "") for m in data.get("models", []) if m.get("name"))
+    except Exception:
+        return []
+
+
 class _InferenceWorker(QObject):
     """Runs in a dedicated QThread."""
 
@@ -86,7 +96,8 @@ class SLMClient(QObject):
         super().__init__(parent)
         slm_cfg = cfg.get("slm", {})
         self._model    = slm_cfg.get("text_model", "gemma3:1b")
-        self._enabled  = slm_cfg.get("backend", "disabled") == "ollama"
+        # Default to enabled; degrades gracefully if Ollama isn't reachable.
+        self._enabled  = slm_cfg.get("backend", "ollama") != "disabled"
         self._timeout  = slm_cfg.get("response_timeout_s", 15)
         self._busy     = False
         self._thread: QThread | None = None
@@ -119,6 +130,20 @@ class SLMClient(QObject):
         """Update Buddy's current mood in the system prompt."""
         self._mood_desc = mood_description
         self._system_prompt = self._make_system_prompt()
+
+    def set_username(self, name: str) -> None:
+        """Hot-update the owner name used in the system prompt."""
+        self._name = name.strip() or "friend"
+        self._system_prompt = self._make_system_prompt()
+
+    def set_model(self, model: str) -> None:
+        """Hot-swap the text model. Takes effect on next request."""
+        if model:
+            self._model = model
+
+    def set_enabled(self, enabled: bool) -> None:
+        """Toggle SLM on/off without restart."""
+        self._enabled = bool(enabled)
 
     @property
     def available(self) -> bool:

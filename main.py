@@ -48,6 +48,7 @@ from skills.social_skill import SocialSkill
 from skills.commentary_skill import CommentarySkill
 from skills.chain_skill import ChainSkill
 from system.paths import CONFIG_PATH, CONFIG_EXAMPLE_PATH as EXAMPLE_PATH, SPRITES_DIR
+from ui.settings_dialog import SettingsDialog
 
 
 def load_config() -> dict:
@@ -111,7 +112,10 @@ def ask_user_name() -> str:
     edit.returnPressed.connect(dlg.accept)
 
     dlg.exec()
-    return edit.text().strip()
+    # Only treat as a real answer if user explicitly accepted (Enter or "Let's go!")
+    if dlg.result() == QDialog.DialogCode.Accepted:
+        return edit.text().strip()
+    return ""
 
 
 def ensure_sprites() -> None:
@@ -178,6 +182,7 @@ class PetApp:
         self._tray.ball_requested.connect(self._play.on_spawn_ball)
         self._tray.vision_requested.connect(self._vision.do_peek)
         self._tray.chain_toggled.connect(self._chain.on_chain_toggled)
+        self._tray.settings_requested.connect(self._open_settings)
 
         # Notifications
         self._notif.new_notification.connect(
@@ -269,6 +274,24 @@ class PetApp:
     def _on_speed_change(self, multiplier: float) -> None:
         base = self._cfg.get("pet", {}).get("speed", 2.0)
         self._window._base_speed = base * multiplier
+
+    def _open_settings(self) -> None:
+        """Show the Settings dialog and hot-apply what we can on save."""
+        dlg = SettingsDialog(self._cfg)
+        dlg.settings_saved.connect(self._apply_settings)
+        dlg.exec()
+
+    def _apply_settings(self, cfg: dict) -> None:
+        """Persist updated config and propagate hot-applicable changes."""
+        save_config(cfg)
+        # Hot-apply: SLM model / enabled / username
+        slm_cfg = cfg.get("slm", {})
+        self._slm.set_enabled(slm_cfg.get("backend", "ollama") != "disabled")
+        self._slm.set_model(slm_cfg.get("text_model", ""))
+        new_name = cfg.get("user", {}).get("name", "") or "friend"
+        self._username = new_name
+        self._slm.set_username(new_name)
+        self._tray.notify("Buddy", "Settings saved. Some changes apply on next restart.")
 
 
 # ---------------------------------------------------------------------------

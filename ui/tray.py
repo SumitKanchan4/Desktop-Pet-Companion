@@ -34,6 +34,7 @@ class TrayManager(QObject):
     ball_requested   = pyqtSignal()        # spawn a ball to play with
     vision_requested = pyqtSignal()        # ask Buddy what he sees on screen
     chain_toggled    = pyqtSignal()        # toggle chain on/off
+    settings_requested = pyqtSignal()      # open the Settings dialog
 
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
@@ -69,6 +70,7 @@ class TrayManager(QObject):
         self._chain_action = menu.addAction("⛓️  Chain here", self.chain_toggled.emit)
 
         menu.addSeparator()
+        menu.addAction("⚙️  Settings…", self.settings_requested.emit)
         menu.addAction("Quit", self.quit_requested.emit)
 
         self._tray.setContextMenu(menu)

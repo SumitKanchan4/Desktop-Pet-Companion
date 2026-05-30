@@ -1,0 +1,9 @@
+PyQt6>=6.5.0
+Pillow>=10.0.0
+pywin32>=306
+psutil>=5.9.0
+pywinauto>=0.6.8
+PyYAML>=6.0
+requests>=2.31.0
+sounddevice>=0.4.6
+numpy>=1.24.0

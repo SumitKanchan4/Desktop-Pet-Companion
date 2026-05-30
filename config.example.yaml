@@ -12,6 +12,11 @@ user:
   name: ""               # Leave blank on first run — Buddy will ask you for it
 
 
+# ── Application ───────────────────────────────────────────────────────────────
+app:
+  auto_update: true       # Check GitHub Releases for newer versions at startup
+
+
 # ── Pet personality ───────────────────────────────────────────────────────────
 pet:
   name: Buddy             # Display name (not currently shown on screen)

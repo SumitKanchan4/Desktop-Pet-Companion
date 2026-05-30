@@ -34,6 +34,7 @@ from PyQt6.QtWidgets import (
 )
 
 from intelligence.slm_client import list_ollama_models, _ollama_available
+import system.autostart as _autostart
 
 
 # Fallback model lists used when Ollama is unreachable so the dropdowns
@@ -103,6 +104,19 @@ class SettingsDialog(QDialog):
             bool(cfg.get("audio", {}).get("enabled", True))
         )
         form.addRow("", self._audio_enabled)
+
+        self._autostart_enabled = QCheckBox("Start Buddy when Windows starts")
+        self._autostart_enabled.setChecked(_autostart.is_enabled())
+        # Apply the registry change immediately when the user toggles so it
+        # takes effect even if they cancel the rest of the dialog.
+        self._autostart_enabled.toggled.connect(_autostart.apply)
+        form.addRow("", self._autostart_enabled)
+
+        self._updates_enabled = QCheckBox("Automatically check for updates")
+        self._updates_enabled.setChecked(
+            bool(cfg.get("app", {}).get("auto_update", True))
+        )
+        form.addRow("", self._updates_enabled)
 
         root.addLayout(form)
 
@@ -180,6 +194,8 @@ class SettingsDialog(QDialog):
         slm["vision_model"] = self._vision_combo.currentText().strip() or "moondream"
 
         cfg.setdefault("audio", {})["enabled"] = self._audio_enabled.isChecked()
+        cfg.setdefault("app", {})["auto_update"] = self._updates_enabled.isChecked()
+        # autostart is applied immediately on toggle — no extra work needed here
 
         self.settings_saved.emit(cfg)
         self.accept()

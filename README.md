@@ -1,179 +1,106 @@
-# 🐾 Buddy — Your AI-Powered Desktop Pet
+# Buddy: The Offline, AI-Powered Desktop Companion
 
-A transparent, always-on-top desktop companion that lives on your Windows desktop.  
-Buddy wanders, sleeps, plays fetch, reads your screen (locally!), reacts to notifications, comments on the weather, and chats with you — all powered by a **local LLM** via [Ollama](https://ollama.com) so nothing leaves your machine.
+<p align="center">
+  <img src="assets/preview.png" alt="Buddy the Desktop Pet in Action" width="150">
+</p>
 
-> Built with Python + PyQt6 + Pillow + Ollama. 100 % offline-capable.
+Buddy is a transparent, always-on-top virtual companion that lives directly on your Windows workspace. Designed as an offline-first desktop companion, Buddy reacts dynamically to your environment, chats with you, comments on your tasks, and plays interactive games—all powered by a local Large Language Model (LLM) running on your machine.
 
----
-
-## ✨ Features
-
-- **Live pixel-art pet** with 18 hand-drawn sprite sheets — walks, runs, sits, jumps, scratches, stretches, sleeps, dances
-- **Live animated tail** that wags faster when excited, droops when sleeping
-- **Screen vision** — uses local multimodal models (moondream, llava, etc.) to glance at your screen and comment in-character
-- **Context-aware** — knows when you're coding, gaming, in a meeting, watching videos, browsing
-- **Speech bubbles** powered by a local SLM (`gemma3:1b` by default)
-- **Notification reactions** — barks at Windows toast notifications
-- **Play mechanics** — give Buddy a treat, throw a ball, play fetch, pet him
-- **Resource-aware** — automatically throttles animations/AI calls if CPU/RAM is busy
-- **Weather reactions** via wttr.in
-- **System tray icon** with quick actions
+Unlike typical cloud-dependent widgets, Buddy performs all processing locally via [Ollama](https://ollama.com). Your files, screen contents, and conversations never leave your computer.
 
 ---
 
-## 📦 Requirements
+## 🎒 Active Skills & Behaviors
 
-- **Windows 10/11**
-- **[Ollama](https://ollama.com)** (the installer will detect it and offer to open the download page if missing)
-- ~3 GB free disk space for the smallest AI model
+Buddy is equipped with modular, high-level skills that determine how he interacts with you and your desktop:
+
+*   **🎾 Play & Fetch:** Triggered via the tray icon. You can drop a treat near Buddy, throw a bone across the screen for him to fetch, or spawn a bouncy ball that he chases, catches, and kicks around your screen.
+*   **👁️ Multimodal Screen Vision:** When configured with a local vision model, Buddy can take a snapshot of your active display to comment in-character on whatever you are reading, designing, or coding.
+*   **🌤️ Real-Time Weather Reactions:** Buddy checkswttr.in periodically for local forecasts, dynamically reacting to the weather outside with comments about rain, snow, heat, or cozy indoor weather.
+*   **🤫 Meeting & Focus Courtesy:** Buddy reads your workspace processes. When you join a meeting (Zoom, Teams, Discord, etc.), he alerts you and falls asleep to stay quiet, waking up and wagging his tail when the meeting ends.
+*   **☕ Health & Wellness Reminders:** If Buddy detects you coding or typing continuously for more than 45 minutes, he will nudge you in-character to take a break, stand up, or drink water.
+*   **⛓️ Leash & Anchor Constraints:** Need Buddy to stay in a designated area of your screen? Trigger the chain leash from the tray icon to pin him to a draggable anchor. Buddy can wander freely within his leash radius but won't wander over your active applications.
 
 ---
 
-## 🚀 Install
+## 🕹️ Controls & Interaction
 
-### Option A — Download installer (recommended)
+Getting Buddy to play or setting up his parameters is completely visual:
 
-1. Grab the latest **`BuddySetup-x.y.z.exe`** from the [Releases page](https://github.com/sumitkanchan4/desktop-pet/releases/latest).
-2. Double-click it and follow the wizard:
-   - **Ollama check** — detects Ollama or opens the download page for you.
-   - **Model picker** — choose a text model (default `gemma3:1b`, ~700 MB) and optionally a vision model (default `moondream`, ~1.7 GB).
-   - Optional: add a desktop shortcut and/or auto-launch on Windows startup.
-3. The installer pulls the selected Ollama models in a console window, then launches Buddy.
+*   **Left-Click + Drag:** Pick up Buddy and place him anywhere on your screen.
+*   **Hold Left-Click (1s+):** Pet Buddy to make him happy (he wags his tail and wiggles with joy).
+*   **Double-Click Buddy:** Opens a chat dialog to talk to him directly. Ask him questions, tell him about your day, or tell him to do tricks.
+*   **Right-Click System Tray Icon:** This is where you activate Buddy's skills. Drop toys, throw bones, leash/unleash him, trigger an immediate screen-peek commentary, or open settings.
 
-That's it — no Python or terminal needed.
+---
 
-### Option B — Run from source
+## ⚙️ Graphical Settings Window
+
+No manual configuration editing is required. Right-clicking the system tray icon and selecting **Settings** opens a custom window where you can:
+
+*   Change your owner nickname.
+*   Enable/disable the AI chat backend and toggle sound effects.
+*   Select from a live list of Ollama models pulled on your system (with manual override support).
+*   Toggle screen vision on or off.
+*   Check the real-time status of your local Ollama connection with a single-click refresh button.
+
+---
+
+## 🚀 Setup & Installation
+
+### Option A: Installer (Easiest)
+1. Download the latest installer `BuddySetup-x.y.z.exe` from the [Releases page](https://github.com/sumitkanchan4/desktop-pet/releases/latest).
+2. The installation wizard will automatically:
+    *   Verify whether [Ollama](https://ollama.com) is installed and active on your system.
+    *   Prompt you to select a text model (defaulting to the lightweight `gemma3:1b`) and an optional vision model (defaulting to `moondream`).
+    *   Download and configure the models.
+3. Launch Buddy from your desktop shortcut or start menu.
+
+### Option B: Build and Run from Source
+If you want to run Buddy in a development environment:
 
 ```powershell
-# 1. Clone
+# 1. Clone the repository
 git clone https://github.com/sumitkanchan4/desktop-pet.git
 cd desktop-pet
 
-# 2. Virtual env
+# 2. Configure a virtual environment
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 
-# 3. Install dependencies
+# 3. Install requirements
 pip install -r requirements.txt
 
-# 4. Install Ollama models (in a separate terminal)
-ollama pull gemma3:1b        # text model (~700 MB)
-ollama pull moondream        # vision model (~1.7 GB, optional)
+# 4. Pull required models via Ollama
+ollama pull gemma3:1b        # For text chats and commentary (~700MB)
+ollama pull moondream        # For screen vision peeking (~1.7GB, optional)
 
-# 5. Run
+# 5. Run the application
 python main.py
 ```
 
-On first launch, `config.example.yaml` is auto-copied to `config.yaml`, and a friendly dialog asks for your name.
-
-### Option C — Build the installer yourself
-
+### Option C: Build the Setup Executable
+To package the project yourself, compile the binaries using PyInstaller and Inno Setup 6:
 ```powershell
-# Requires Python 3.11+ and Inno Setup 6 (https://jrsoftware.org/isdl.php)
 .\build\build.ps1 -Installer -Version 0.1.0
-# Output:  build\Output\BuddySetup-0.1.0.exe
 ```
+The output setup file will be saved in `build\Output\BuddySetup-0.1.0.exe`.
 
 ---
 
-## ⚙️ Configuration
+## 🔒 Privacy & Safety
 
-Everything is in [`config.yaml`](config.example.yaml) (created on first run from `config.example.yaml`). Every key is documented inline. Highlights:
-
-```yaml
-slm:
-  text_model: gemma3:1b      # any Ollama chat model
-  vision_enabled: false      # set true after pulling a vision model
-  vision_model: moondream    # any pulled multimodal model
-```
-
-`config.yaml` is git-ignored — your personal name and any future API keys stay private.
+*   **Offline Processing:** Chat text, screen peeks, and active process tracking are executed entirely on your CPU/GPU via Ollama. No personal workspace statistics or text entries are uploaded to external APIs.
+*   **System Integrity:** Screen-peeks are processed directly in system memory and passed to Ollama. They are never cached to disk or saved in local directories.
+*   **Telemetry:** Buddy does not collect crash telemetry or analytics. All logs remain local on your machine.
 
 ---
 
-## 🎮 Controls
+## 📄 License & Attribution
 
-| Action | Result |
-|---|---|
-| **Left-click + drag** | Pick Buddy up and move him |
-| **Hold left-click 1 s+** | Pet him (he gets happier) |
-| **Double-click** | Open chat dialog — say anything |
-| **Right-click tray icon** | Quick actions: give treat, throw ball, peek at screen, etc. |
+This project is open-source under the [MIT License](LICENSE). 
 
----
-
-## 🗂️ Project Structure
-
-```
-.
-├── main.py                  # entry point — thin orchestrator
-├── sprite_gen.py            # generates all 18 sprite sheets via PIL
-├── config.example.yaml      # template config (git-tracked)
-├── config.yaml              # your config (git-ignored, auto-created)
-├── assets/
-│   ├── sprites/             # generated pixel-art sprite sheets
-│   ├── bark.wav             # bark sound
-│   └── tray_icon.png        # tray icon
-├── pet/
-│   ├── brain.py             # state machine (IDLE/WALK/SIT/JUMP/…)
-│   ├── window.py            # transparent always-on-top widget
-│   └── mood.py              # mood tracker (HAPPY/LONELY/…)
-├── intelligence/
-│   ├── slm_client.py        # Ollama text generation
-│   ├── screen_vision.py     # multimodal screen peek
-│   └── weather.py           # wttr.in client
-├── system/
-│   ├── throttle.py          # CPU/RAM monitor
-│   ├── context_detector.py  # foreground-window classifier
-│   └── notification_watcher.py
-├── skills/                  # high-level behaviours
-│   ├── weather_skill.py
-│   ├── vision_skill.py
-│   ├── play_skill.py
-│   ├── social_skill.py
-│   ├── commentary_skill.py
-│   └── chain_skill.py
-├── ui/
-│   ├── tray.py
-│   ├── treat_widget.py
-│   ├── ball_widget.py
-│   └── chain_anchor.py
-└── audio/
-    └── engine.py            # WAV playback via sounddevice
-```
-
----
-
-## 🔒 Privacy
-
-- **No data leaves your machine** when using Ollama (default).
-- The only external HTTP call is to [wttr.in](https://wttr.in) for weather (no auth, no tracking).
-- Screen contents are only sent to your **local** Ollama instance for vision peeks.
-- `config.yaml` is git-ignored to keep your personal name out of public commits.
-
----
-
-## 🐛 Troubleshooting
-
-| Symptom | Fix |
-|---|---|
-| Buddy doesn't talk | Make sure Ollama is running: `ollama serve` |
-| `[vision] Ollama unreachable` | Same — start Ollama |
-| `I need glasses! Run: ollama pull moondream` | Pull a vision model |
-| Buddy freezes on a low-spec PC | Lower `pet.fps_full` in `config.yaml` |
-
----
-
-## 📄 License
-
-[MIT](LICENSE) — do whatever you want, just don't blame me if Buddy bites.
-
----
-
-## 🙏 Credits
-
-- Sprite art generated procedurally with [Pillow](https://pillow.readthedocs.io/)
-- LLM inference via [Ollama](https://ollama.com)
-- Vision models: [moondream](https://moondream.ai), [LLaVA](https://llava-vl.github.io/)
-- Built on [PyQt6](https://www.riverbankcomputing.com/software/pyqt/)
+Special thanks to:
+*   [Ollama](https://ollama.com) for local model execution.
+*   [Pillow](https://pillow.readthedocs.io/) for procedural sprite rasterization.
+*   [PyQt6](https://www.riverbankcomputing.com/software/pyqt/) for the window rendering layer.

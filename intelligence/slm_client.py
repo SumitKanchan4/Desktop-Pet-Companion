@@ -190,6 +190,8 @@ class SLMClient(QObject):
         """
         if self._busy:
             print("[SLM] busy, skipping request")
+            if on_error:
+                on_error("SLM is busy")
             return
         if not self._enabled:
             if on_error:
@@ -282,6 +284,8 @@ class SLMClient(QObject):
     def _cleanup(self) -> None:
         if self._thread:
             self._thread.quit()
-            self._thread.wait(2000)
+            self._thread.deleteLater()
             self._thread = None
-        self._worker = None
+        if self._worker:
+            self._worker.deleteLater()
+            self._worker = None

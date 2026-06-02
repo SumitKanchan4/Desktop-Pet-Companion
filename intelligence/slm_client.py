@@ -79,7 +79,7 @@ class _InferenceWorker(QObject):
             "prompt": self.prompt,
             "system": self.system,
             "stream": False,
-            "options": {"num_predict": 80, "temperature": 0.8},
+            "options": {"num_predict": 300, "temperature": 0.8},
         }).encode()
 
         req = urllib.request.Request(
@@ -260,10 +260,15 @@ class SLMClient(QObject):
     def _done(self, text: str, callback: Callable[[str], None],
               user_turn: str | None = None) -> None:
         self._busy = False
+        
+        # Remove any thinking blocks (e.g. <think>...</think>)
+        import re
+        cleaned_text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
+        
         if user_turn is not None:
-            self._history.append((user_turn, text))
+            self._history.append((user_turn, cleaned_text))
         self._cleanup()
-        callback(text)
+        callback(cleaned_text)
         # Ollama clearly reachable — refresh cache so next ask() is instant
         _avail_cache["ok"] = True
         _avail_cache["ts"] = time.monotonic()

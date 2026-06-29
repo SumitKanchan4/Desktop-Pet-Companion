@@ -15,7 +15,7 @@ from typing import Callable
 from PyQt6.QtCore import QObject, QThread, pyqtSignal
 
 
-OLLAMA_BASE = "http://localhost:11434"
+OLLAMA_BASE = "http://127.0.0.1:11434"
 
 # ── Cached availability (never block the main thread) ─────────────────────────
 # The last known result + timestamp. Refreshed in a background thread.
@@ -67,11 +67,12 @@ class _InferenceWorker(QObject):
     finished = pyqtSignal(str)
     error    = pyqtSignal(str)
 
-    def __init__(self, model: str, prompt: str, system: str) -> None:
+    def __init__(self, model: str, prompt: str, system: str, timeout: int = 30) -> None:
         super().__init__()
         self.model  = model
         self.prompt = prompt
         self.system = system
+        self.timeout = timeout
 
     def run(self) -> None:
         payload = json.dumps({
@@ -89,7 +90,7 @@ class _InferenceWorker(QObject):
             method="POST",
         )
         try:
-            with urllib.request.urlopen(req, timeout=30) as resp:
+            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
                 data = json.loads(resp.read())
                 text = data.get("response", "").strip()
                 print(f"[SLM] response: {text[:80]}")
@@ -124,7 +125,7 @@ class SLMClient(QObject):
         self._model    = slm_cfg.get("text_model", "gemma3:1b")
         # Default to enabled; degrades gracefully if Ollama isn't reachable.
         self._enabled  = slm_cfg.get("backend", "ollama") != "disabled"
-        self._timeout  = slm_cfg.get("response_timeout_s", 15)
+        self._timeout  = max(slm_cfg.get("response_timeout_s", 300), 300)
         self._busy     = False
         self._thread: QThread | None = None
         self._worker: _InferenceWorker | None = None
@@ -214,7 +215,9 @@ class SLMClient(QObject):
         self._busy   = True
         self._thread = QThread()
         # Rebuild system prompt fresh (captures current time-of-day + mood)
-        self._worker = _InferenceWorker(self._model, full_prompt, self._make_system_prompt())
+        self._worker = _InferenceWorker(
+            self._model, full_prompt, self._make_system_prompt(), timeout=self._timeout
+        )
         self._worker.moveToThread(self._thread)
 
         # Store the user turn now; reply stored in _done

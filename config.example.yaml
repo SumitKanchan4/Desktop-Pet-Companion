@@ -51,7 +51,7 @@ slm:
                           # Options: moondream, llava, llava-phi3, gemma3:4b
 
   # ── Timing ────────────────────────────────────────────────────────────────
-  response_timeout_s: 15          # Seconds before an SLM request is abandoned
+  response_timeout_s: 300         # Seconds before an SLM request is abandoned
   behavior_update_interval_s: 120 # How often Buddy makes unprompted comments
   screen_read_interval_s: 60      # Minimum gap between auto screen-peeks (seconds)
 

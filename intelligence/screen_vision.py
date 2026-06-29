@@ -26,9 +26,9 @@ from PIL import Image, ImageGrab
 log = logging.getLogger(__name__)
 
 # ── Configuration ─────────────────────────────────────────────────────────────
-_OLLAMA_URL = "http://localhost:11434"
+_OLLAMA_URL = "http://127.0.0.1:11434"
 _MAX_PX      = 768      # resize screenshot to this before sending
-_TIMEOUT_S   = 45       # inference timeout
+_TIMEOUT_S   = 300       # inference timeout
 _NUM_PREDICT = 60       # max tokens in response
 
 # Ordered preference — first match wins

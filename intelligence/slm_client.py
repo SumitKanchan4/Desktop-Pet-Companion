@@ -1,7 +1,7 @@
 """
-slm_client.py — Non-blocking Ollama client.
+slm_client.py — Non-blocking Ollama client using LangChain.
 Runs inference in a QThread worker so it never stalls the main thread.
-Falls back gracefully if Ollama is not running or model not pulled.
+Falls back gracefully if Ollama is not running, and supports tool execution.
 """
 
 from __future__ import annotations
@@ -10,15 +10,13 @@ import time
 import urllib.request
 import urllib.error
 from collections import deque
-from typing import Callable
+from typing import Callable, Any
 
 from PyQt6.QtCore import QObject, QThread, pyqtSignal
-
 
 OLLAMA_BASE = "http://127.0.0.1:11434"
 
 # ── Cached availability (never block the main thread) ─────────────────────────
-# The last known result + timestamp. Refreshed in a background thread.
 _avail_cache: dict = {"ok": False, "ts": 0.0}
 _AVAIL_TTL = 10.0   # seconds before re-checking
 
@@ -62,45 +60,89 @@ def list_ollama_models() -> list[str]:
 
 
 class _InferenceWorker(QObject):
-    """Runs in a dedicated QThread."""
+    """Runs in a dedicated QThread using LangChain ChatOllama."""
 
     finished = pyqtSignal(str)
     error    = pyqtSignal(str)
 
-    def __init__(self, model: str, prompt: str, system: str, timeout: int = 30) -> None:
+    def __init__(self, model: str, prompt: str, system: str, history: list[tuple[str, str]], client: SLMClient, timeout: int = 30) -> None:
         super().__init__()
         self.model  = model
         self.prompt = prompt
         self.system = system
+        self.history = history
+        self.client = client
         self.timeout = timeout
 
     def run(self) -> None:
-        payload = json.dumps({
-            "model":  self.model,
-            "prompt": self.prompt,
-            "system": self.system,
-            "stream": False,
-            "options": {"num_predict": 300, "temperature": 0.8},
-        }).encode()
-
-        req = urllib.request.Request(
-            f"{OLLAMA_BASE}/api/generate",
-            data=payload,
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
         try:
-            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
-                data = json.loads(resp.read())
-                text = data.get("response", "").strip()
-                print(f"[SLM] response: {text[:80]}")
-                self.finished.emit(text)
-        except urllib.error.URLError as exc:
-            print(f"[SLM] URLError: {exc}")
-            self.error.emit(f"Ollama unreachable: {exc}")
+            # Lazy import LangChain to prevent startup block
+            from langchain_ollama import ChatOllama
+            from langchain_core.messages import SystemMessage, HumanMessage, AIMessage, ToolMessage
+            from intelligence.tools import get_tools
+
+            print(f"[SLM Worker] Initializing ChatOllama for model: {self.model}")
+            llm = ChatOllama(
+                model=self.model,
+                temperature=0.8,
+                timeout=self.timeout
+            )
+
+            tools = get_tools(self.client)
+
+            # Build conversational message list
+            messages = [SystemMessage(content=self.system)]
+            for user_msg, buddy_reply in self.history:
+                messages.append(HumanMessage(content=user_msg))
+                messages.append(AIMessage(content=buddy_reply))
+            messages.append(HumanMessage(content=self.prompt))
+
+            # Bind tools
+            try:
+                llm_with_tools = llm.bind_tools(tools)
+                response = llm_with_tools.invoke(messages)
+            except Exception as exc:
+                print(f"[SLM Worker] Tool binding failed (model may not support tools), falling back to direct chat: {exc}")
+                response = llm.invoke(messages)
+
+            # Manual ReAct loop for tool execution
+            if hasattr(response, "tool_calls") and response.tool_calls:
+                messages.append(response)
+                print(f"[SLM Worker] Model requested tool execution: {response.tool_calls}")
+
+                for tool_call in response.tool_calls:
+                    tool_name = tool_call["name"]
+                    tool_args = tool_call["args"]
+
+                    tool_obj = next((t for t in tools if t.name == tool_name), None)
+                    if tool_obj:
+                        try:
+                            print(f"[SLM Worker] Executing tool '{tool_name}' with args {tool_args}")
+                            result = tool_obj.invoke(tool_args)
+                            print(f"[SLM Worker] Tool '{tool_name}' result: {result}")
+                        except Exception as e:
+                            result = f"Error executing tool: {e}"
+                    else:
+                        result = f"Tool '{tool_name}' not found."
+
+                    messages.append(ToolMessage(content=str(result), tool_call_id=tool_call["id"]))
+
+                # Get final response combining tool output
+                final_response = llm.invoke(messages)
+                text = final_response.content
+            else:
+                text = response.content
+
+            print(f"[SLM Worker] Completed inference successfully.")
+            self.finished.emit(text)
+
         except Exception as exc:
-            print(f"[SLM] Error: {exc}")
-            self.error.emit(str(exc))
+            print(f"[SLM Worker] Inference failed: {exc}")
+            # Differentiate network issues vs timeout
+            if not _ollama_available():
+                self.error.emit("OLLAMA_DOWN")
+            else:
+                self.error.emit("TIMEOUT")
 
 
 class SLMClient(QObject):
@@ -121,11 +163,12 @@ class SLMClient(QObject):
     def __init__(self, cfg: dict, username: str = "friend",
                  parent: QObject | None = None) -> None:
         super().__init__(parent)
+        self._cfg = cfg
         slm_cfg = cfg.get("slm", {})
         self._model    = slm_cfg.get("text_model", "gemma3:1b")
-        # Default to enabled; degrades gracefully if Ollama isn't reachable.
         self._enabled  = slm_cfg.get("backend", "ollama") != "disabled"
-        self._timeout  = max(slm_cfg.get("response_timeout_s", 300), 300)
+        # Minimum timeout is now 15s instead of forcing 300s
+        self._timeout  = max(slm_cfg.get("response_timeout_s", 15), 15)
         self._busy     = False
         self._thread: QThread | None = None
         self._worker: _InferenceWorker | None = None
@@ -134,9 +177,20 @@ class SLMClient(QObject):
         self._mood_desc = ""
         self._system_prompt = self._make_system_prompt()
         self._history: deque[tuple[str, str]] = deque(maxlen=5)  # (user_msg, buddy_reply)
-        # Prime the availability cache immediately (daemon thread, won't block startup)
+        
+        # Tools callback registry
+        self._tools_callbacks: dict[str, Callable[[], str] | Callable[[str], str]] = {}
+        
+        # Heavy model warning flag
+        self.slow_model_warning = False
+
+        # Prime availability cache
         if self._enabled:
             _refresh_availability_async()
+
+    def register_tool_callback(self, name: str, callback: Callable) -> None:
+        """Register a callback for LangChain tools to interact with system/UI."""
+        self._tools_callbacks[name] = callback
 
     def _make_system_prompt(self) -> str:
         from datetime import datetime
@@ -177,18 +231,13 @@ class SLMClient(QObject):
 
     @property
     def available(self) -> bool:
-        """Non-blocking — returns last cached status.
-        The cache is primed at construction and refreshed after every ask()."""
+        """Non-blocking — returns last cached status."""
         return self._enabled and _cached_available()
 
     def ask(self, prompt: str, on_done: Callable[[str], None],
             on_error: Callable[[str], None] | None = None,
             track_history: bool = True) -> None:
-        """Non-blocking. on_done called on main thread via Qt signal.
-
-        track_history=True  — prepends last 5 exchanges and stores this one.
-        track_history=False — stateless call (context comments, reminders).
-        """
+        """Non-blocking. on_done called on main thread via Qt signal."""
         if self._busy:
             print("[SLM] busy, skipping request")
             if on_error:
@@ -199,8 +248,6 @@ class SLMClient(QObject):
                 on_error("SLM disabled")
             return
 
-        # Stale or never-checked: kick off a background refresh.
-        # If cache says unavailable, invoke on_error immediately (non-blocking).
         age = time.monotonic() - _avail_cache["ts"]
         if age > _AVAIL_TTL:
             _refresh_availability_async()
@@ -210,17 +257,21 @@ class SLMClient(QObject):
                 on_error("Ollama not running")
             return
 
-        full_prompt = self._build_prompt(prompt, track_history)
         print(f"[SLM] asking: {prompt[:60]}")
         self._busy   = True
         self._thread = QThread()
-        # Rebuild system prompt fresh (captures current time-of-day + mood)
+        
+        # Build worker with history and client reference
         self._worker = _InferenceWorker(
-            self._model, full_prompt, self._make_system_prompt(), timeout=self._timeout
+            self._model,
+            prompt,
+            self._make_system_prompt(),
+            list(self._history) if track_history else [],
+            self,
+            timeout=self._timeout
         )
         self._worker.moveToThread(self._thread)
 
-        # Store the user turn now; reply stored in _done
         _user_turn = prompt if track_history else None
 
         self._thread.started.connect(self._worker.run)
@@ -249,22 +300,12 @@ class SLMClient(QObject):
         )
         self.ask(prompt, on_done, track_history=False)
 
-    # ------------------------------------------------------------------ #
-
-    def _build_prompt(self, current: str, use_history: bool) -> str:
-        """Prepend last N exchanges as a mini transcript."""
-        if not use_history or not self._history:
-            return current
-        lines = []
-        for user_msg, buddy_reply in self._history:
-            lines.append(f"{user_msg}")
-            lines.append(f"Buddy: {buddy_reply}")
-        lines.append(current)
-        return "\n".join(lines)
+    # ────────────────────────────────────────────────────────────────── #
 
     def _done(self, text: str, callback: Callable[[str], None],
               user_turn: str | None = None) -> None:
         self._busy = False
+        self.slow_model_warning = False  # Reset on successful reply
         
         # Remove any thinking blocks (e.g. <think>...</think>)
         import re
@@ -274,19 +315,60 @@ class SLMClient(QObject):
             self._history.append((user_turn, cleaned_text))
         self._cleanup()
         callback(cleaned_text)
-        # Ollama clearly reachable — refresh cache so next ask() is instant
+        
+        # Ollama is reachable, update availability cache
         _avail_cache["ok"] = True
         _avail_cache["ts"] = time.monotonic()
 
     def _fail(self, err: str, callback: Callable[[str], None] | None) -> None:
         self._busy = False
         self._cleanup()
+
+        if err == "TIMEOUT":
+            # Attempt fallback to an installed lightweight model
+            installed = list_ollama_models()
+            lightweight_fallbacks = [
+                "gemma3:1b", "llama3.2:1b", "gemma2:2b", "tinyllama",
+                "phi3:mini", "llama3.2:3b", "gemma3:4b", "qwen2.5:1.5b", "qwen2.5:3b"
+            ]
+            fallback_model = None
+            for model_name in lightweight_fallbacks:
+                match = next((m for m in installed if model_name in m.lower()), None)
+                if match and match != self._model:
+                    fallback_model = match
+                    break
+
+            if fallback_model:
+                print(f"[SLM] Model timed out. Falling back from '{self._model}' to '{fallback_model}'")
+                original_model = self._model
+                self.set_model(fallback_model)
+                self.slow_model_warning = False
+                
+                # Apply fallback to config
+                self._cfg.setdefault("slm", {})["text_model"] = fallback_model
+                
+                if callback:
+                    callback(f"FALLBACK:{fallback_model}:{original_model}")
+                return
+            else:
+                print("[SLM] Model timed out. No lightweight fallback available.")
+                self.slow_model_warning = True
+                if callback:
+                    callback("TIMEOUT_NO_FALLBACK")
+                return
+
+        elif err == "OLLAMA_DOWN":
+            if callback:
+                callback("OLLAMA_DOWN")
+            return
+
         if callback:
             callback(f"[{err}]")
 
     def _cleanup(self) -> None:
         if self._thread:
             self._thread.quit()
+            self._thread.wait() # Ensure thread is completely exited
             self._thread.deleteLater()
             self._thread = None
         if self._worker:

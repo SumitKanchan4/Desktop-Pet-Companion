@@ -156,6 +156,7 @@ class PetApp:
         )
         self._chain   = ChainSkill(self._window, self._tray, cfg)
 
+        self._register_tool_callbacks()
         self._wire_signals()
         self._start_periodic_timers()
 
@@ -286,18 +287,37 @@ class PetApp:
         chat_bar = self._window._chat_bar
 
         def _on_reply(text: str) -> None:
+            # Append warning text if model is currently marked as running slow
+            if getattr(self._slm, "slow_model_warning", False):
+                text += "\n\n⚠️ (Running slow. Try a lighter model in settings!)"
             self._window.say(text)
             chat_bar.clear_typing()
 
         def _fallback(err: str = "") -> None:
-            reply = random.choice(["Woof! 🐾", "Bork bork!", "*wags tail furiously*", "Pat me more!"])
-            self._window.say(reply)
+            if err.startswith("FALLBACK:"):
+                parts = err.split(":")
+                fallback_model = parts[1] if len(parts) > 1 else "lightweight"
+                original_model = parts[2] if len(parts) > 2 else "current"
+                self._window.say(
+                    f"Woof! I switched to the lighter '{fallback_model}' model "
+                    f"because '{original_model}' was taking too long to load. 🐾"
+                )
+            elif err == "TIMEOUT_NO_FALLBACK":
+                self._window.say(
+                    "Woof... my brain is freezing under this heavy model! 🧠❄️ "
+                    "Please download and select a lighter model like 'gemma3:1b' in my settings!"
+                )
+            elif err == "OLLAMA_DOWN":
+                self._window.say("Bork! I can't reach Ollama. Is it running in the background? 🐾")
+            else:
+                reply = random.choice(["Woof! 🐾", "Bork bork!", "*wags tail furiously*", "Pat me more!"])
+                self._window.say(reply)
             chat_bar.clear_typing()
 
         if self._slm.available:
             self._slm.ask(prompt, on_done=_on_reply, on_error=_fallback)
         else:
-            _fallback()
+            _fallback("OLLAMA_DOWN")
 
     def _on_speed_change(self, multiplier: float) -> None:
         base = self._cfg.get("pet", {}).get("speed", 2.0)
@@ -373,6 +393,46 @@ class PetApp:
         self._username = new_name
         self._slm.set_username(new_name)
         self._tray.notify("Buddy", "Settings saved. Some changes apply on next restart.")
+
+    def _register_tool_callbacks(self) -> None:
+        """Register system and UI interaction callbacks for LangChain tools."""
+        import psutil
+        from datetime import datetime
+
+        self._slm.register_tool_callback("get_weather", lambda: self._weather.data.buddy_summary() if self._weather.data else "No weather data loaded yet.")
+        self._slm.register_tool_callback("get_system_resources", lambda: f"CPU: {psutil.cpu_percent()}%, RAM: {psutil.virtual_memory().percent}%")
+        self._slm.register_tool_callback("get_current_time", lambda: datetime.now().strftime("%Y-%m-%d %I:%M %p"))
+        self._slm.register_tool_callback("pet_action", self._handle_pet_action_tool)
+
+    def _handle_pet_action_tool(self, action: str) -> str:
+        """Handles physical actions commanded by the agent/LLM."""
+        action = action.lower().strip()
+        if action == "jump":
+            self._window.do_jump()
+            return "Buddy jumped!"
+        elif action == "walk":
+            sw = self._window._screen_rect.width()
+            sh = self._window._screen_rect.height()
+            import random
+            from PyQt6.QtCore import QPoint
+            target_pt = QPoint(random.randint(100, sw - 100), random.randint(100, sh - 100))
+            self._window.walk_toward(target_pt)
+            return f"Buddy started walking toward screen coordinate ({target_pt.x()}, {target_pt.y()})."
+        elif action == "bark":
+            from audio import engine as sound_engine
+            sound_engine.bark()
+            self._window.say("Woof! 🐾")
+            return "Buddy barked!"
+        elif action == "mood_happy":
+            self._mood.on_interacted()
+            return "Buddy's mood set to HAPPY."
+        elif action == "mood_sleep":
+            from pet.mood import PetMood
+            from system.throttle import ThrottleLevel
+            self._brain.on_throttle_changed(ThrottleLevel.SLEEP)
+            return "Buddy is taking a nap."
+        else:
+            return f"Unknown pet action: '{action}'."
 
 
 # ---------------------------------------------------------------------------
